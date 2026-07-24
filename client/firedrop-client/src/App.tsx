@@ -1,10 +1,85 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css'
 import Device from './components/device';
+import axios from 'axios';
 
 
 
-function App() {
+  function App() {
+  const [ws, setWs] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [pendingFile, setPendingFile] = useState(null); 
+  const [incomingAlert, setIncomingAlert] = useState(null);
+
+  useEffect(()=>{
+    const socket = new WebSocket("ws://192.168.1.31:3000/ws")
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      switch (data.event){
+        case "devices_update":
+          setDevices(data.users)
+          break
+
+        case "incoming_transfer":
+          setIncomingAlert({
+            transferId: data.transfer_id,
+            filename: data.filename
+          });
+          break;
+
+        case "receiver_ready":
+          startaxiosupload(data.transfer_id); 
+          break;
+      }
+    }
+    setWs(socket);
+      return () => socket.close();
+  }, [])
+
+
+  const handleDrop = (file, targetDeviceID) => {
+    setPendingFile(file); 
+    const transferId = crypto.randomUUID();
+
+    ws.send(JSON.stringify({
+        event: "upload_request",
+        target_id: targetDeviceID,
+        transfer_id: transferId,
+        filename: file.name
+    }));
+  }
+
+  const handleaccept = () => {
+    const {transferId, filename} = incomingAlert
+    const link = document.createElement("a")
+    link.href = `http://192.168.1.31:3000/download/${transferId}`;
+    link.setAttribute("download", filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    setIncomingAlert(null)
+  }
+
+  const startaxiosupload = async (transferId) => {
+    if (!pendingFile) return;
+    const formData = new FormData()
+    formData.append("file", pendingFile);
+    try { 
+        await axios.post(`http://192.168.1.31:3000/stream/${transferId}`, formData, {
+          headers: {
+            "Content-Type":"multipart/form-data"
+          },
+          onUploadProgress: (progressEvent) => {
+
+          }
+        })
+        console.log("Upload complete")
+        setPendingFile(null)
+      
+    } catch (e) {
+      console.log("upload failed", e)
+    }
+  }
 
   return (
     <>
