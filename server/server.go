@@ -20,6 +20,7 @@ func main() {
 	})
 
 	app.Post("/upload", func(c fiber.Ctx) error {
+		fmt.Println("req recieved from", c.IP())
 		file, err := c.FormFile("document")
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, "No file included")
@@ -28,6 +29,7 @@ func main() {
 		if err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 		}
+		fmt.Println("/upload sucess ", file.Filename)
 
 		return c.JSON(fiber.Map{
 			"status":   200,
