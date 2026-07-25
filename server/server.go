@@ -17,6 +17,8 @@ import (
 type Client struct {
 	ID   string
 	Name string
+	typ  string
+	ip   string
 	Conn *websocket.Conn
 }
 
@@ -55,6 +57,8 @@ func main() {
 			ID:   id,
 			Name: c.Query("name", defaultName),
 			Conn: c,
+			typ:  c.Query("type", "unknown"),
+			ip:   c.IP(),
 		}
 		clientsMu.Unlock()
 
@@ -186,6 +190,8 @@ func broadcastdevices() {
 		activeusers = append(activeusers, fiber.Map{
 			"id":   client.ID,
 			"name": client.Name,
+			"type": client.typ,
+			"ip":   client.ip,
 		})
 	}
 

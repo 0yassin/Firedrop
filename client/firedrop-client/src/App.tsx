@@ -4,17 +4,31 @@ import Device from './components/device';
 import axios from 'axios';
 
 
+type Device = {
+  id:string;
+  name: string;
+  typ: string;
+  ip: string;
+}
 
+type WSDmsg = {
+  event: string;
+  users?: Device[];
+  filename?:string;
+  transfer_id:string;
+}
   function App() {
   const [ws, setWs] = useState(null);
-  const [devices, setDevices] = useState([]);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [pendingFile, setPendingFile] = useState(null); 
   const [incomingAlert, setIncomingAlert] = useState(null);
+  const [devicename, setdevicename] = useState(null)
+  const [devicetype, setdevicetype] = useState(null)
 
   useEffect(()=>{
-    const socket = new WebSocket("ws://192.168.1.31:3000/ws")
+    const socket = new WebSocket(`ws://192.168.1.31:3000/ws${devicename != null? `?name=${devicename}` : ''}${devicetype != null ? `&type=${devicetype}` : ''}`)    
     socket.onmessage = (event) => {
-      const data = JSON.parse(event.data)
+      const data = JSON.parse(event.data) as WSDmsg;
       switch (data.event){
         case "devices_update":
           setDevices(data.users)
@@ -87,7 +101,13 @@ import axios from 'axios';
         <div className='text-white m-12'>
           <div className=''>
             <h1 className='text-3xl mb-6'>Connected devices</h1>
+            <ul>
+              {devices.map((device, index) => (
+                  <li key={index}>{device.name}</li>
+                ))}
+            </ul>
             <div className='flex-col gap-2 flex ml-2'>
+              
               <Device device_id={3} device_name='device?' />
             </div>
           </div>
