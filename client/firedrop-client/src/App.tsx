@@ -28,16 +28,24 @@ type WSDmsg = {
   id?:string;
 }
 
+type Filereq = {
+  filename: string;
+  transferid: string;
+}
+
 function App() {
   const [ws, setWs] = useState(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [pendingFile, setPendingFile] = useState(null);
   const pendingFileRef = useRef(null);
-  const [incomingAlert, setIncomingAlert] = useState(null);
   const [devicename, setdevicename] = useState(null)
   const [devicetype, setdevicetype] = useState<DeviceType>(null)
   const [own_id, setownid] = useState(null)
+  const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([])
+  const [api_url, setapi_url] = useState<string>("192.168.1.31:3000")
   const logging = true
+
+  
 
   {logging &&
     useEffect(()=>{
@@ -62,7 +70,7 @@ function App() {
     if (detectedType) params.append('type', detectedType);
 
     const queryString = params.toString();
-    const url = `ws://192.168.1.31:3000/ws${queryString ? `?${queryString}` : ''}`;
+    const url = `ws://${api_url}/ws${queryString ? `?${queryString}` : ''}`;
 
     const socket = new WebSocket(url);
     socket.onmessage = (event) => {
@@ -73,10 +81,7 @@ function App() {
           break;
 
         case "incoming_transfer":
-          setIncomingAlert({
-            transferId: data.transfer_id,
-            filename: data.filename
-          });
+          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename, transferid: data.transfer_id}]);
           break;
 
         case "receiver_ready":
@@ -125,15 +130,14 @@ function App() {
     }));
   }
 
-  const handleaccept = () => {
-    const {transferId, filename} = incomingAlert
+  const handleaccept = (filetoaccept:Filereq) => {
     const link = document.createElement("a")
-    link.href = `http://192.168.1.31:3000/download/${transferId}`;
-    link.setAttribute("download", filename)
+    link.href = `http://${api_url}/download/${filetoaccept.transferid}`;
+    link.setAttribute("download", filetoaccept.filename)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    setIncomingAlert(null)
+    setincomingfilereqs(prevItems => prevItems.filter(item => item.transferid != filetoaccept.transferid))
   }
 
   const startaxiosupload = async (transferId) => {
@@ -147,7 +151,7 @@ function App() {
     formData.append("file", pendingFileRef.current);
     try { 
         console.log("[DEBUG] 3.8 Starting Axios POST request");
-        await axios.post(`http://192.168.1.31:3000/stream/${transferId}`, formData, {
+        await axios.post(`http://${api_url}/stream/${transferId}`, formData, {
           onUploadProgress: (progressEvent) => {
 
           }
@@ -170,19 +174,13 @@ function App() {
             <div className='flex-col gap-2 flex ml-2'>
                 {devices.map((device, index) => device.id != own_id && (
                   <Device key={index} handle_drop={handleDrop} target_device={device.id} device_name={device.name} />
-                )
-                  
-                )}
+                ))}
             </div>
           </div>
-          {incomingAlert != null &&
-            <div>
-              <h1 className='text-3xl mb-6'>File download request</h1>
-              <div className='flex-col gap-2 flex ml-2'>
-                  {incomingAlert?.filename}
-              </div>
-              <button onClick={()=>handleaccept()} >Accept</button>
-            </div>
+          {incomingfilereqs.length>0 && 
+            incomingfilereqs.map((filereq:Filereq, index)=>(
+              <button key={index} onClick={()=>handleaccept(filereq)}>{filereq.filename}</button>
+            ))
           }
         </div>
       </div>
