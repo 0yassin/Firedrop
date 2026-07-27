@@ -45,7 +45,9 @@ var clientsMu sync.RWMutex
 
 func main() {
 	port := "3000"
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		StreamRequestBody: true,
+	})
 	app.Use(cors.New())
 
 	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
@@ -128,24 +130,23 @@ func main() {
 
 			return fiber.NewError(fiber.StatusNotFound, "Receiver not ready")
 		}
-		fileHeader, err := c.FormFile("file")
-		if err != nil {
-			fmt.Println("[DEBUG] ERROR: Failed to get file from form data", err)
-			return fiber.NewError(fiber.StatusBadRequest, "No file uploaded")
+
+		bodystream := c.RequestCtx().RequestBodyStream()
+
+		if bodystream == nil {
+			return fiber.NewError(fiber.StatusBadRequest, "No body provided")
 		}
-		incomingfile, err := fileHeader.Open()
-		if err != nil {
-			fmt.Println("[DEBUG] ERROR: Failed to open incoming file", err)
-			return fiber.NewError(fiber.StatusInternalServerError, "Can't open file")
-		}
-		defer incomingfile.Close()
-		fmt.Println("[DEBUG] 5. File parsed, starting io.Copy stream")
-		bytesWritten, err := io.Copy(transfer.Writer, incomingfile)
-		fmt.Printf("[DEBUG] 6. io.Copy finished. Bytes transferred: %d. Error: %v\n", bytesWritten, err)
+
+		bytesWritten, err := io.Copy(transfer.Writer, bodystream)
 		transfer.Writer.Close()
 		transfersMu.Lock()
 		delete(transfers, transferid)
 		transfersMu.Unlock()
+		if err != nil {
+			fmt.Println("[DEBUG] Failed to copy stream", err)
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to copy stream")
+		}
+		fmt.Printf("streamed %d \n", bytesWritten)
 		return c.SendStatus(200)
 	})
 

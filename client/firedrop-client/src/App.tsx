@@ -43,6 +43,7 @@ function App() {
   const [own_id, setownid] = useState(null)
   const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([])
   const [api_url, setapi_url] = useState<string>("192.168.1.31:3000")
+  const [uploadpercent, setuploadpercent] = useState(0)
   const logging = true
 
   
@@ -131,12 +132,13 @@ function App() {
   }
 
   const handleaccept = (filetoaccept:Filereq) => {
-    const link = document.createElement("a")
-    link.href = `http://${api_url}/download/${filetoaccept.transferid}`;
-    link.setAttribute("download", filetoaccept.filename)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    const iframe = document.createElement("iframe")
+    iframe.style.display = "none"
+    iframe.src = `http://${api_url}/download/${filetoaccept.transferid}`
+    document.body.appendChild(iframe)
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+    }, 60000);
     setincomingfilereqs(prevItems => prevItems.filter(item => item.transferid != filetoaccept.transferid))
   }
 
@@ -147,21 +149,25 @@ function App() {
       console.log("[DEBUG] ERROR: Upload aborted because no file was found in ref");
       return;
     }
-    const formData = new FormData()
-    formData.append("file", pendingFileRef.current);
-    try { 
-        console.log("[DEBUG] 3.8 Starting Axios POST request");
-        await axios.post(`http://${api_url}/stream/${transferId}`, formData, {
-          onUploadProgress: (progressEvent) => {
-
+    try {
+      axios.post(`http://${api_url}/stream/${transferId}`, fileToUpload, {
+        headers:{
+          "Content-Type": fileToUpload.type || "application/octet-stream",
+          
+        },
+        onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setuploadpercent(percentCompleted)
+            console.log(`uploading: ${percentCompleted}%`);
           }
-        })
-        console.log("[DEBUG] 7. Axios upload POST promise resolved successfully")
-        setPendingFile(null)
-        pendingFileRef.current = null;
-      
-    } catch (e) {
-      console.error("[DEBUG] ERROR: Axios upload failed", e)
+      })
+
+      console.log("upload complete")
+      setPendingFile(null);
+      pendingFileRef.current = null;
+    }
+    catch (e) {
+      console.log("error during upload:", e)
     }
   }
 
