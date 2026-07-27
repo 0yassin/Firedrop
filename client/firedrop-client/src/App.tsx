@@ -150,7 +150,7 @@ function App() {
       return;
     }
     try {
-      axios.post(`http://${api_url}/stream/${transferId}`, fileToUpload, {
+        await axios.post(`http://${api_url}/stream/${transferId}`, fileToUpload, {
         headers:{
           "Content-Type": fileToUpload.type || "application/octet-stream",
           
