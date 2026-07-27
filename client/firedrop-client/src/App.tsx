@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './App.css'
 import Device from './components/device';
 import axios from 'axios';
@@ -168,9 +168,11 @@ function App() {
           <div className=''>
             <h1 className='text-3xl mb-6'>Connected devices</h1>
             <div className='flex-col gap-2 flex ml-2'>
-                {devices.map((device, index) => (
+                {devices.map((device, index) => device.id != own_id && (
                   <Device key={index} handle_drop={handleDrop} target_device={device.id} device_name={device.name} />
-                ))}
+                )
+                  
+                )}
             </div>
           </div>
           {incomingAlert != null &&
