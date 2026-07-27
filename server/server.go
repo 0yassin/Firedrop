@@ -60,8 +60,12 @@ func main() {
 			typ:  c.Query("type", "unknown"),
 			ip:   c.IP(),
 		}
-		clientsMu.Unlock()
 
+		clientsMu.Unlock()
+		c.WriteJSON(fiber.Map{
+			"event": "welcome",
+			"id":    id,
+		})
 		broadcastdevices()
 		fmt.Printf("A new device just connected, ID: %s \n", id)
 
@@ -114,24 +118,31 @@ func main() {
 		return c.SendFile("dist/main.html")
 	})
 
-	app.Get("/stream/:transferID", func(c fiber.Ctx) error {
+	app.Post("/stream/:transferID", func(c fiber.Ctx) error {
 		transferid := c.Params("transferID")
+		fmt.Printf("[DEBUG] 4. Sender hit POST /stream for transfer: %s\n", transferid)
 		transfersMu.Lock()
 		transfer, exists := transfers[transferid]
 		transfersMu.Unlock()
 		if !exists || transfer.Writer == nil {
-			return fiber.NewError(fiber.StatusNotFound, "Receiver not ready!")
+
+			return fiber.NewError(fiber.StatusNotFound, "Receiver not ready")
 		}
 		fileHeader, err := c.FormFile("file")
 		if err != nil {
+			fmt.Println("[DEBUG] ERROR: Failed to get file from form data", err)
 			return fiber.NewError(fiber.StatusBadRequest, "No file uploaded")
 		}
 		incomingfile, err := fileHeader.Open()
 		if err != nil {
+			fmt.Println("[DEBUG] ERROR: Failed to open incoming file", err)
 			return fiber.NewError(fiber.StatusInternalServerError, "Can't open file")
 		}
 		defer incomingfile.Close()
-		io.Copy(transfer.Writer, incomingfile)
+		fmt.Println("[DEBUG] 5. File parsed, starting io.Copy stream")
+		bytesWritten, err := io.Copy(transfer.Writer, incomingfile)
+		fmt.Printf("[DEBUG] 6. io.Copy finished. Bytes transferred: %d. Error: %v\n", bytesWritten, err)
+		transfer.Writer.Close()
 		transfersMu.Lock()
 		delete(transfers, transferid)
 		transfersMu.Unlock()
@@ -140,11 +151,13 @@ func main() {
 
 	app.Get("/download/:transferID", func(c fiber.Ctx) error {
 		transferID := c.Params("transferID")
+		fmt.Printf("[DEBUG] 1. Receiver requested download for transfer: %s\n", transferID)
 
 		transfersMu.Lock()
 		transfer, exists := transfers[transferID]
 		if !exists {
 			transfersMu.Unlock()
+			fmt.Println("[DEBUG] ERROR: Transfer not found during download")
 			return fiber.NewError(fiber.StatusNotFound, "Transfer not found")
 		}
 
@@ -157,10 +170,13 @@ func main() {
 		clientsMu.RUnlock()
 
 		if senderExists {
+			fmt.Printf("[DEBUG] 2. Alerting Sender (%s) that Receiver is ready\n", sender.Name)
 			sender.Conn.WriteJSON(fiber.Map{
 				"event":       "receiver_ready",
 				"transfer_id": transferID,
 			})
+		} else {
+			fmt.Println("[DEBUG] ERROR: Sender disconnected before download started")
 		}
 
 		c.Set("Content-Disposition", "attachment; filename="+transfer.Filename)

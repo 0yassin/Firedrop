@@ -3,52 +3,20 @@ import { useState } from "react";
 import { useDropzone } from "react-dropzone";
 
 interface DeviceProps {
-    device_id: number;
     device_name: string;
+    handle_drop: any;
+    target_device:any;
 }
 
-export default function Device({ device_id, device_name }: DeviceProps) {
+export default function Device({device_name, handle_drop, target_device }: DeviceProps) {
     const [progress, setProgress] = useState(0);
     const [status, setStatus] = useState('');
     const serveraddr = 'http://192.168.1.31:3000/upload';
 
-    const handleUpload = async (file: File) => {
-        if (!file) {
-            setStatus('Please select a file first.');
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('document', file);
-        formData.append('target_id', device_id.toString()); 
-
-        try {
-            setStatus("Uploading...");
-            await axios.post(serveraddr, formData, {
-                headers: {
-                    "Content-Type": "multipart/form-data"
-                },
-                onUploadProgress: (progressEvent) => {
-                    if (progressEvent.total) {
-                        const percentage = Math.round(
-                            (progressEvent.loaded * 100) / progressEvent.total
-                        );
-                        setProgress(percentage);
-                    }
-                },
-            });
-            setStatus('Upload successful!');
-            setTimeout(() => { setProgress(0); setStatus(''); }, 3000);
-
-        } catch (error) {
-            console.error(error);
-            setStatus('Upload failed.');
-            setProgress(0);
-        }
-    }
+   
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        onDrop: (acceptedFiles) => handleUpload(acceptedFiles[0]),
+        onDrop: (acceptedFiles) => handle_drop(acceptedFiles[0], target_device),
         multiple: false 
     });
 
