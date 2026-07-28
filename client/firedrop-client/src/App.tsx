@@ -35,38 +35,32 @@ type Filereq = {
   senderName:string;
 }
 
-
+type Outgoingfilereq = {
+  targetdevice: string;
+  file: File;
+}
 
 function App() {
   const [ws, setWs] = useState(null);
   const [devices, setDevices] = useState<Device[]>([]);
-  const [pendingFile, setPendingFile] = useState(null);
-  const pendingFileRef = useRef(null);
   const [devicename, setdevicename] = useState(null)
   const [devicetype, setdevicetype] = useState<DeviceType>(null)
   const [own_id, setownid] = useState(null)
   const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([])
   const [api_url, setapi_url] = useState<string>("192.168.1.31:3000")
-  const [progress, setProgress] = useState<Map<string, number>>(new Map<string, number>());
+  const [progress, setProgress] = useState<Map<string, number>>(new Map());
+  const outgoingfilereqsRef = useRef<Map<string, Outgoingfilereq>>(new Map())
   const logging = true
 
-  
-
-  
-
-  {logging &&
-    useEffect(()=>{
-      console.log("[DEVICES] - ", devices)
-      console.log("-----")
-      console.log("[DEVICENAME] - ", devicename)
-      console.log("-----")
-      console.log("[DEVICETYPE] - ", devicetype)
-      console.log("-----")
-      console.log("[OWNID] - ", own_id)
-      console.log("-----")
-      console.log("[PENDINGFILE] - ", pendingFile)
-    }, [devices, devicename, devicetype, own_id, pendingFile])
-  }
+  useEffect(() => {
+    if (!logging) return;
+    console.log("[DEVICES] - ", devices);
+    console.log("[DEVICENAME] - ", devicename);
+    console.log("[DEVICETYPE] - ", devicetype);
+    console.log("[OWNID] - ", own_id);
+    console.log("[OUTGOINGFILEREQS] - ", outgoingfilereqsRef.current);
+    console.log("[PROGRESS] - ", progress);
+  }, [devices, devicename, devicetype, own_id, progress, logging]);
 
   useEffect(() => {
     const detectedType = getDeviceType();
@@ -88,7 +82,7 @@ function App() {
           break;
 
         case "incoming_transfer":
-          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename, transferid: data.transfer_id, senderName:data.senderName}]);
+          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename || "unknown", transferid: data.transfer_id || "", senderName:data.senderName || "unknown"}]);
           break;
 
         case "receiver_ready":
@@ -124,11 +118,16 @@ function App() {
     return 'Unknown';
   }
 
-  const handleDrop = (file, targetDeviceID) => {
-    setPendingFile(file); 
-    pendingFileRef.current = file;
+  const handleDrop = (file:File, targetDeviceID:string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket is not connected");
+      return;
+    }
     const transferId = crypto.randomUUID();
-
+    outgoingfilereqsRef.current.set(transferId, {
+      targetdevice: targetDeviceID,
+      file: file,
+    });
     ws.send(JSON.stringify({
         event: "upload_request",
         target_id: targetDeviceID,
@@ -150,7 +149,7 @@ function App() {
   }
 
   const startaxiosupload = async (transferId) => {
-    const fileToUpload = pendingFileRef.current;
+    const fileToUpload = outgoingfilereqsRef.current?.get(transferId).file;
     console.log("[DEBUG] 3.5 startaxiosupload fired. File status:", fileToUpload ? "File exists" : "NULL");
     if (!fileToUpload) {
       console.log("[DEBUG] ERROR: Upload aborted because no file was found in ref");
@@ -163,15 +162,20 @@ function App() {
           
         },
         onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            progress.set(transferId, percentCompleted)
-            console.log(`uploading: ${percentCompleted}%`);
-          }
+          const total = progressEvent.total || 1;
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / total);
+          setProgress(prev => new Map(prev.set(transferId, percentCompleted)));
+          console.log(`uploading: ${percentCompleted}%`);
+        }
       })
 
       console.log("upload complete")
-      setPendingFile(null);
-      pendingFileRef.current = null;
+      outgoingfilereqsRef.current.delete(transferId)
+      setProgress(prev => {
+        const next = new Map(prev);
+        next.delete(transferId);
+        return next;
+      });
     }
     catch (e) {
       console.log("error during upload:", e)
@@ -185,8 +189,8 @@ function App() {
           <div className=''>
             <h1 className='text-3xl mb-6'>Connected devices</h1>
             <div className='flex-col gap-2 flex ml-2'>
-                {devices.map((device, index) => device.id != own_id && (
-                  <Device key={index} handle_drop={handleDrop} target_device={device.id} device_name={device.name} />
+                {devices.map((device) => device.id != own_id && (
+                  <Device key={device.id} handle_drop={handleDrop} target_device={device.id} device_name={device.name} />
                 ))}
             </div>
           </div>
@@ -194,20 +198,25 @@ function App() {
           <div>
             <h1 className='text-3xl mb-6'>File upload requests</h1>
             {
-              incomingfilereqs.map((filereq:Filereq, index)=>(
-                <div className=' bg-[#637aef] flex pl-4  justify-between rounded-[5px] items-center'>
+              incomingfilereqs.map((filereq:Filereq)=>(
+                <div  key={filereq.transferid} className=' bg-[#637aef] flex pl-4  justify-between rounded-[5px] items-center'>
                   <div>
                     {filereq.filename}
                     {filereq.senderName.length>0 && 
                       <h1>from: {filereq.senderName}</h1>
                     }
                   </div>
-                  <button key={index} className='h-full bg-[#cc3636] p-4 cursor-pointer' onClick={()=>handleaccept(filereq)}>Accept</button>
+                  <button className='h-full bg-[#cc3636] p-4 cursor-pointer' onClick={()=>handleaccept(filereq)}>Accept</button>
                 </div>
               ))
             }
           </div>
           }
+          <div>
+            {
+
+            }
+          </div>
         </div>
       </div>
     </>
