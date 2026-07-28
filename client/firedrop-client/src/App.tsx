@@ -167,15 +167,27 @@ function App() {
     }));
   }
 
-  const handleaccept = (filetoaccept:Filereq) => {
+  const handleaccept = (transfertoaccept:Filereq) => {
     const iframe = document.createElement("iframe")
     iframe.style.display = "none"
-    iframe.src = `http://${api_url}/download/${filetoaccept.transferid}`
+    iframe.src = `http://${api_url}/download/${transfertoaccept.transferid}`
     document.body.appendChild(iframe)
     setTimeout(() => {
       document.body.removeChild(iframe);
     }, 60000);
-    setincomingfilereqs(prevItems => prevItems.filter(item => item.transferid != filetoaccept.transferid))
+    setincomingfilereqs(prevItems => prevItems.filter(item => item.transferid != transfertoaccept.transferid))
+  }
+
+  const handlereject = (transfertoreject:Filereq) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket is not connected");
+      return;
+    }
+    ws.send(JSON.stringify({
+      event: "transfer_reject",
+      transfer_id: transfertoreject.transferid,
+    }))
+    setincomingfilereqs(prev => prev.filter(item => item.transferid !== transfertoreject.transferid));
   }
 
   const startaxiosupload = async (transferId) => {
@@ -245,6 +257,8 @@ function App() {
                     }
                   </div>
                   <button className='h-full bg-[#cc3636] p-4 cursor-pointer' onClick={()=>handleaccept(filereq)}>Accept</button>
+                  <button className='h-full bg-[#cc3636] p-4 cursor-pointer' onClick={()=>handlereject(filereq)}>Reject</button>
+
                 </div>
               ))
             }
