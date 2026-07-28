@@ -40,6 +40,13 @@ type Outgoingfilereq = {
   file: File;
 }
 
+type OutgoingItemUI = {
+  transferId: string;
+  filename: string;
+  targetDeviceName: string;
+  status: 'waiting' | 'uploading' | 'done' | 'failed';
+};
+
 function App() {
   const [ws, setWs] = useState(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -50,6 +57,7 @@ function App() {
   const [api_url, setapi_url] = useState<string>("192.168.1.31:3000")
   const [progress, setProgress] = useState<Map<string, number>>(new Map());
   const outgoingfilereqsRef = useRef<Map<string, Outgoingfilereq>>(new Map())
+  const [outgoingList, setOutgoingList] = useState<OutgoingItemUI[]>([]);
   const logging = true
 
   useEffect(() => {
@@ -123,11 +131,21 @@ function App() {
       console.error("WebSocket is not connected");
       return;
     }
+    const targetDevice = devices.find(d => d.id === targetDeviceID);
     const transferId = crypto.randomUUID();
     outgoingfilereqsRef.current.set(transferId, {
       targetdevice: targetDeviceID,
       file: file,
     });
+    setOutgoingList(prev => [
+    ...prev,
+    {
+      transferId,
+      filename: file.name,
+      targetDeviceName: targetDevice?.name || "unknown",
+      status: 'waiting', 
+    }
+  ]);
     ws.send(JSON.stringify({
         event: "upload_request",
         target_id: targetDeviceID,
@@ -150,11 +168,15 @@ function App() {
 
   const startaxiosupload = async (transferId) => {
     const fileToUpload = outgoingfilereqsRef.current?.get(transferId).file;
+
     console.log("[DEBUG] 3.5 startaxiosupload fired. File status:", fileToUpload ? "File exists" : "NULL");
     if (!fileToUpload) {
       console.log("[DEBUG] ERROR: Upload aborted because no file was found in ref");
       return;
     }
+    setOutgoingList(prev =>
+      prev.map(item => item.transferId === transferId ? { ...item, status: 'uploading' } : item)
+    );
     try {
         await axios.post(`http://${api_url}/stream/${transferId}`, fileToUpload, {
         headers:{
@@ -170,7 +192,8 @@ function App() {
       })
 
       console.log("upload complete")
-      outgoingfilereqsRef.current.delete(transferId)
+      outgoingfilereqsRef.current.delete(transferId);
+      setOutgoingList(prev => prev.filter(item => item.transferId !== transferId));
       setProgress(prev => {
         const next = new Map(prev);
         next.delete(transferId);
@@ -179,6 +202,9 @@ function App() {
     }
     catch (e) {
       console.log("error during upload:", e)
+      setOutgoingList(prev =>
+        prev.map(item => item.transferId === transferId ? { ...item, status: 'failed' } : item)
+      );
     }
   }
 
@@ -214,6 +240,14 @@ function App() {
           }
           <div>
             {
+                outgoingList.map((item)=>(
+                  <div className='bg-amber-300' key={item.transferId}>
+                    <h1>To: {item.targetDeviceName}</h1>
+                    <h1>{item.filename}</h1>
+                    <h1>{item.status}</h1>
+                    {progress.get(item.transferId) && <h1>{progress.get(item.transferId)}</h1>}
+                  </div>
+                ))
 
             }
           </div>
