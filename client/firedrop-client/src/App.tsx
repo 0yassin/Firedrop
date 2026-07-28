@@ -184,7 +184,7 @@ function App() {
       return;
     }
     ws.send(JSON.stringify({
-      event: "transfer_reject",
+      event: "transfer_rejected",
       transfer_id: transfertoreject.transferid,
     }))
     setincomingfilereqs(prev => prev.filter(item => item.transferid !== transfertoreject.transferid));

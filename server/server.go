@@ -88,7 +88,6 @@ func main() {
 					fmt.Println("Invalid JSON received:", err)
 					continue
 				}
-
 				switch message.Event {
 				case "upload_request":
 					transfersMu.Lock()
@@ -96,13 +95,12 @@ func main() {
 						SenderID:   id,
 						ReceiverID: message.TargetID,
 						Filename:   message.Filename,
+						TransferID: message.TransferID,
 					}
 					transfersMu.Unlock()
 
 					clientsMu.RLock()
 					target, exists := clients[message.TargetID]
-					clientsMu.RUnlock()
-
 					if exists {
 						target.Conn.WriteJSON(fiber.Map{
 							"event":       "incoming_transfer",
@@ -112,6 +110,28 @@ func main() {
 						})
 						fmt.Printf("Alerted %s about transfer %s\n", target.Name, message.TransferID)
 					}
+					clientsMu.RUnlock()
+
+				case "transfer_rejected":
+					transfersMu.Lock()
+					transfer, exists := transfers[message.TransferID]
+					transfersMu.Unlock()
+					if !exists {
+						break
+					}
+					clientsMu.Lock()
+					senderConn, ok := clients[transfer.SenderID]
+					clientsMu.Unlock()
+					if ok {
+						senderConn.Conn.WriteJSON(WsMsg{
+							Event:      "transfer_rejected",
+							TransferID: transfer.TransferID,
+						})
+					}
+					transfersMu.Lock()
+					delete(transfers, message.TransferID)
+					transfersMu.Unlock()
+
 				}
 			}
 		}
