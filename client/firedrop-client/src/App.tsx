@@ -21,7 +21,7 @@ type DeviceType =
   | 'Unknown';
 
 type WSDmsg = {
-  event: string;
+  event: WSevent;
   users?: Device[];
   filename?:string;
   transfer_id?:string;
@@ -44,8 +44,10 @@ type OutgoingItemUI = {
   transferId: string;
   filename: string;
   targetDeviceName: string;
-  status: 'waiting' | 'uploading' | 'done' | 'failed';
+  status: 'waiting' | 'uploading' | 'done' | 'failed' | 'rejected';
 };
+
+type WSevent = "devices_update" | "incoming_transfer" | "receiver_ready" | "welcome" | "transfer_rejected"
 
 function App() {
   const [ws, setWs] = useState(null);
@@ -84,7 +86,7 @@ function App() {
     const socket = new WebSocket(url);
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data) as WSDmsg;
-      switch (data.event) {
+      switch (data.event as WSevent) {
         case "devices_update":
           setDevices(data.users || []);
           break;
@@ -101,6 +103,16 @@ function App() {
         case "welcome":
           setownid(data.id);
           break;
+        
+        case "transfer_rejected":
+          if (data.transfer_id) {
+            console.log("transfer rejected:", data.transfer_id)
+            outgoingfilereqsRef.current.delete(data.transfer_id)
+            setOutgoingList(prev => 
+              prev.map(item => item.transferId == data.transfer_id ? {...item, status: 'rejected'} : item)
+            );
+          }
+
       }
     };
 
