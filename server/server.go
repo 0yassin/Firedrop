@@ -108,6 +108,7 @@ func main() {
 							"event":       "incoming_transfer",
 							"transfer_id": message.TransferID,
 							"filename":    message.Filename,
+							"senderName":  clients[id].Name,
 						})
 						fmt.Printf("Alerted %s about transfer %s\n", target.Name, message.TransferID)
 					}

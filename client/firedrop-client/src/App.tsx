@@ -26,11 +26,13 @@ type WSDmsg = {
   filename?:string;
   transfer_id?:string;
   id?:string;
+  senderName?:string;
 }
 
 type Filereq = {
   filename: string;
   transferid: string;
+  senderName:string;
 }
 
 function App() {
@@ -82,7 +84,7 @@ function App() {
           break;
 
         case "incoming_transfer":
-          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename, transferid: data.transfer_id}]);
+          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename, transferid: data.transfer_id, senderName:data.senderName}]);
           break;
 
         case "receiver_ready":
@@ -128,6 +130,7 @@ function App() {
         target_id: targetDeviceID,
         transfer_id: transferId,
         filename: file.name
+        
     }));
   }
 
@@ -184,9 +187,22 @@ function App() {
             </div>
           </div>
           {incomingfilereqs.length>0 && 
-            incomingfilereqs.map((filereq:Filereq, index)=>(
-              <button key={index} onClick={()=>handleaccept(filereq)}>{filereq.filename}</button>
-            ))
+          <div>
+            <h1 className='text-3xl mb-6'>File upload requests</h1>
+            {
+              incomingfilereqs.map((filereq:Filereq, index)=>(
+                <div className=' bg-[#637aef] flex pl-4  justify-between rounded-[5px] items-center'>
+                  <div>
+                    {filereq.filename}
+                    {filereq.senderName.length>0 && 
+                      <h1>from: {filereq.senderName}</h1>
+                    }
+                  </div>
+                  <button key={index} className='h-full bg-[#cc3636] p-4 cursor-pointer' onClick={()=>handleaccept(filereq)}>Accept</button>
+                </div>
+              ))
+            }
+          </div>
           }
         </div>
       </div>
