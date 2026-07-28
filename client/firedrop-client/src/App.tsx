@@ -35,6 +35,8 @@ type Filereq = {
   senderName:string;
 }
 
+
+
 function App() {
   const [ws, setWs] = useState(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -45,8 +47,10 @@ function App() {
   const [own_id, setownid] = useState(null)
   const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([])
   const [api_url, setapi_url] = useState<string>("192.168.1.31:3000")
-  const [uploadpercent, setuploadpercent] = useState(0)
+  const [progress, setProgress] = useState<Map<string, number>>(new Map<string, number>());
   const logging = true
+
+  
 
   
 
@@ -160,7 +164,7 @@ function App() {
         },
         onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setuploadpercent(percentCompleted)
+            progress.set(transferId, percentCompleted)
             console.log(`uploading: ${percentCompleted}%`);
           }
       })
