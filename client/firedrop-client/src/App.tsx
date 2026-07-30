@@ -27,17 +27,23 @@ type WSDmsg = {
   transfer_id?:string;
   id?:string;
   senderName?:string;
+  filetype?:string;
+  preview?:string;
 }
 
 type Filereq = {
   filename: string;
   transferid: string;
   senderName:string;
+  preview?:string;
+  filetype?:string;
 }
 
 type Outgoingfilereq = {
   targetdevice: string;
   file: File;
+  filetype: string;
+  preview?: string;
 }
 
 type OutgoingItemUI = {
@@ -56,11 +62,13 @@ function App() {
   const [devicetype, setdevicetype] = useState<DeviceType>(null)
   const [own_id, setownid] = useState(null)
   const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([])
-  const [api_url, setapi_url] = useState<string>("192.168.1.31:3000")
+  const api_url = `${import.meta.env.VITE_API_URL}`
   const [progress, setProgress] = useState<Map<string, number>>(new Map());
   const outgoingfilereqsRef = useRef<Map<string, Outgoingfilereq>>(new Map())
   const [outgoingList, setOutgoingList] = useState<OutgoingItemUI[]>([]);
   const logging = true
+  const maxHeight = 100
+  const maxWidth = 100
 
   useEffect(() => {
     if (!logging) return;
@@ -70,6 +78,7 @@ function App() {
     console.log("[OWNID] - ", own_id);
     console.log("[OUTGOINGFILEREQS] - ", outgoingfilereqsRef.current);
     console.log("[PROGRESS] - ", progress);
+    console.log(api_url)
   }, [devices, devicename, devicetype, own_id, progress, logging]);
 
   useEffect(() => {
@@ -92,7 +101,7 @@ function App() {
           break;
 
         case "incoming_transfer":
-          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename || "unknown", transferid: data.transfer_id || "", senderName:data.senderName || "unknown"}]);
+          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename || "unknown", transferid: data.transfer_id || "", senderName:data.senderName || "unknown", filetype:data.filetype || "unknown", preview:data.preview || null}]);
           break;
 
         case "receiver_ready":
@@ -145,26 +154,65 @@ function App() {
     }
     const targetDevice = devices.find(d => d.id === targetDeviceID);
     const transferId = crypto.randomUUID();
-    outgoingfilereqsRef.current.set(transferId, {
-      targetdevice: targetDeviceID,
-      file: file,
-    });
-    setOutgoingList(prev => [
-    ...prev,
-    {
-      transferId,
-      filename: file.name,
-      targetDeviceName: targetDevice?.name || "unknown",
-      status: 'waiting', 
-    }
-  ]);
-    ws.send(JSON.stringify({
-        event: "upload_request",
-        target_id: targetDeviceID,
-        transfer_id: transferId,
-        filename: file.name
+
+    const finalizeAndSend = (previewData: string | null) => {
+        outgoingfilereqsRef.current.set(transferId, {
+            targetdevice: targetDeviceID,
+            file: file,
+            filetype: file.type
+        });
         
-    }));
+        setOutgoingList(prev => [...prev, {
+            transferId,
+            filename: file.name,
+            targetDeviceName: targetDevice?.name || "unknown",
+            status: 'waiting',
+        }]);
+
+        ws.send(JSON.stringify({
+            event: "upload_request",
+            target_id: targetDeviceID,
+            transfer_id: transferId,
+            filename: file.name,
+            filetype: file.type,
+            preview: previewData,
+        }));
+    };
+
+
+    if (file.type.startsWith("image")){
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = (event) => {
+        const img = new Image()
+        img.src = event.target?.result as string
+        img.onload = () => {
+          const canvas = document.createElement("canvas")
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } 
+          else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height
+
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          finalizeAndSend(canvas.toDataURL("image/jpeg", 0.8))
+        }
+      }
+    } else {
+      finalizeAndSend(null)
+    }
   }
 
   const handleaccept = (transfertoaccept:Filereq) => {
@@ -254,6 +302,9 @@ function App() {
                     {filereq.filename}
                     {filereq.senderName.length>0 && 
                       <h1>from: {filereq.senderName}</h1>
+                    }
+                    {filereq.filetype.startsWith("image")&&
+                      <img src={filereq.preview} className='w-full h-full'/>
                     }
                   </div>
                   <button className='h-full bg-[#cc3636] p-4 cursor-pointer' onClick={()=>handleaccept(filereq)}>Accept</button>

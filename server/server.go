@@ -27,6 +27,8 @@ type WsMsg struct {
 	TargetID   string `json:"target_id"`
 	TransferID string `json:"transfer_id"`
 	Filename   string `json:"filename"`
+	Filetype   string `json:"filetype"`
+	Preview    string `json:"preview"`
 }
 
 type Transfer struct {
@@ -44,6 +46,7 @@ var clients = make(map[string]*Client)
 var clientsMu sync.RWMutex
 
 func main() {
+	fmt.Printf(getaddr())
 	port := "3000"
 	app := fiber.New(fiber.Config{
 		StreamRequestBody: true,
@@ -107,6 +110,8 @@ func main() {
 							"transfer_id": message.TransferID,
 							"filename":    message.Filename,
 							"senderName":  clients[id].Name,
+							"filetype":    message.Filetype,
+							"preview":     message.Preview,
 						})
 						fmt.Printf("Alerted %s about transfer %s\n", target.Name, message.TransferID)
 					}
@@ -151,6 +156,7 @@ func main() {
 
 			return fiber.NewError(fiber.StatusNotFound, "Receiver not ready")
 		}
+		defer transfer.Writer.Close()
 
 		bodystream := c.RequestCtx().RequestBodyStream()
 
