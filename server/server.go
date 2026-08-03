@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
@@ -23,6 +24,7 @@ type Client struct {
 	typ  string
 	ip   string
 	Conn *websocket.Conn
+	mu   sync.Mutex
 }
 
 type WsMsg struct {
@@ -40,6 +42,7 @@ type Transfer struct {
 	Filename   string
 	TransferID string
 	Writer     *io.PipeWriter
+	Age        time.Time
 }
 
 var transfers = make(map[string]*Transfer)
@@ -47,16 +50,28 @@ var transfersMu sync.RWMutex
 
 var clients = make(map[string]*Client)
 var clientsMu sync.RWMutex
-var broadcastMu sync.Mutex
 
 func main() {
+
 	port := "3000"
 	fmt.Printf("current IP:%s:%s", getaddr(), port)
 	app := fiber.New(fiber.Config{
 		StreamRequestBody: true,
 	})
 	app.Use(cors.New())
-
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			transfersMu.Lock()
+			for transferid, transfer := range transfers {
+				if time.Since(transfer.Age) > 5*time.Minute {
+					delete(transfers, transferid)
+				}
+			}
+			transfersMu.Unlock()
+		}
+	}()
 	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
 		var id string = uuid.New().String()
 		defaultName := fmt.Sprintf("device-%d", len(clients))
@@ -71,7 +86,7 @@ func main() {
 		}
 
 		clientsMu.Unlock()
-		c.WriteJSON(fiber.Map{
+		clients[id].WriteJSON(fiber.Map{
 			"event": "welcome",
 			"id":    id,
 		})
@@ -82,22 +97,25 @@ func main() {
 			msgType, msg, err := c.ReadMessage()
 
 			if err != nil {
+				transfersMu.Lock()
+
 				for transferid, transfer := range transfers {
 					if transfer.SenderID == id {
 						client, exists := clients[transfer.ReceiverID]
 						if exists {
-							client.Conn.WriteJSON(fiber.Map{
+							client.WriteJSON(fiber.Map{
 								"event":       "sender_disconnected",
 								"transfer_id": transferid,
 								"filename":    transfer.Filename,
 							})
 						}
-						transfer.Writer.Close()
-						transfersMu.Lock()
+						if transfer.Writer != nil {
+							transfer.Writer.CloseWithError(fmt.Errorf("sender disconnected"))
+						}
 						delete(transfers, transferid)
-						transfersMu.Unlock()
 					}
 				}
+				transfersMu.Unlock()
 				clientsMu.Lock()
 				delete(clients, id)
 				clientsMu.Unlock()
@@ -119,13 +137,14 @@ func main() {
 						ReceiverID: message.TargetID,
 						Filename:   message.Filename,
 						TransferID: message.TransferID,
+						Age:        time.Now(),
 					}
 					transfersMu.Unlock()
 
 					clientsMu.RLock()
 					target, exists := clients[message.TargetID]
 					if exists {
-						target.Conn.WriteJSON(fiber.Map{
+						target.WriteJSON(fiber.Map{
 							"event":       "incoming_transfer",
 							"transfer_id": message.TransferID,
 							"filename":    message.Filename,
@@ -148,7 +167,7 @@ func main() {
 					senderConn, ok := clients[transfer.SenderID]
 					clientsMu.Unlock()
 					if ok {
-						senderConn.Conn.WriteJSON(WsMsg{
+						senderConn.WriteJSON(WsMsg{
 							Event:      "transfer_rejected",
 							TransferID: transfer.TransferID,
 						})
@@ -196,6 +215,7 @@ func main() {
 	})
 
 	app.Get("/download/:transferID", func(c fiber.Ctx) error {
+
 		transferID := c.Params("transferID")
 		fmt.Printf("[DEBUG] 1. Receiver requested download for transfer: %s\n", transferID)
 
@@ -210,6 +230,10 @@ func main() {
 		reader, writer := io.Pipe()
 		transfer.Writer = writer
 		transfersMu.Unlock()
+		go func() {
+			<-c.Context().Done()
+			writer.CloseWithError(fmt.Errorf("receiver canceled download"))
+		}()
 
 		clientsMu.RLock()
 		sender, senderExists := clients[transfer.SenderID]
@@ -217,7 +241,7 @@ func main() {
 
 		if senderExists {
 			fmt.Printf("[DEBUG] 2. Alerting Sender (%s) that Receiver is ready\n", sender.Name)
-			sender.Conn.WriteJSON(fiber.Map{
+			sender.WriteJSON(fiber.Map{
 				"event":       "receiver_ready",
 				"transfer_id": transferID,
 			})
@@ -258,12 +282,10 @@ func broadcastdevices() {
 	}
 
 	for _, client := range clients {
-		broadcastMu.Lock()
-		err := client.Conn.WriteJSON(fiber.Map{
+		err := client.WriteJSON(fiber.Map{
 			"event": "devices_update",
 			"users": activeusers,
 		})
-		broadcastMu.Unlock()
 		if err != nil {
 			fmt.Println("Error sending to", client.Name)
 		}
@@ -291,4 +313,10 @@ func SanitizeFilename(input string) string {
 		safeName = safeName[:64]
 	}
 	return safeName
+}
+
+func (c *Client) WriteJSON(v interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.Conn.WriteJSON(v)
 }
