@@ -6,6 +6,9 @@ import (
 	"io"
 	"log"
 	"net"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/gofiber/contrib/v3/websocket"
@@ -44,10 +47,11 @@ var transfersMu sync.RWMutex
 
 var clients = make(map[string]*Client)
 var clientsMu sync.RWMutex
+var broadcastMu sync.Mutex
 
 func main() {
-	fmt.Printf(getaddr())
 	port := "3000"
+	fmt.Printf("current IP:%s:%s", getaddr(), port)
 	app := fiber.New(fiber.Config{
 		StreamRequestBody: true,
 	})
@@ -78,6 +82,22 @@ func main() {
 			msgType, msg, err := c.ReadMessage()
 
 			if err != nil {
+				for transferid, transfer := range transfers {
+					if transfer.SenderID == id {
+						client, exists := clients[transfer.ReceiverID]
+						if exists {
+							client.Conn.WriteJSON(fiber.Map{
+								"event":       "sender_disconnected",
+								"transfer_id": transferid,
+								"filename":    transfer.Filename,
+							})
+						}
+						transfer.Writer.Close()
+						transfersMu.Lock()
+						delete(transfers, transferid)
+						transfersMu.Unlock()
+					}
+				}
 				clientsMu.Lock()
 				delete(clients, id)
 				clientsMu.Unlock()
@@ -157,22 +177,20 @@ func main() {
 			return fiber.NewError(fiber.StatusNotFound, "Receiver not ready")
 		}
 		defer transfer.Writer.Close()
-
 		bodystream := c.RequestCtx().RequestBodyStream()
-
 		if bodystream == nil {
 			return fiber.NewError(fiber.StatusBadRequest, "No body provided")
 		}
-
 		bytesWritten, err := io.Copy(transfer.Writer, bodystream)
-		transfer.Writer.Close()
+		if err != nil {
+			fmt.Println("[DEBUG] Failed to copy stream", err)
+			transfer.Writer.CloseWithError(err)
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to copy stream")
+		}
 		transfersMu.Lock()
 		delete(transfers, transferid)
 		transfersMu.Unlock()
-		if err != nil {
-			fmt.Println("[DEBUG] Failed to copy stream", err)
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to copy stream")
-		}
+
 		fmt.Printf("streamed %d \n", bytesWritten)
 		return c.SendStatus(200)
 	})
@@ -207,7 +225,7 @@ func main() {
 			fmt.Println("[DEBUG] ERROR: Sender disconnected before download started")
 		}
 
-		c.Set("Content-Disposition", "attachment; filename="+transfer.Filename)
+		c.Set("Content-Disposition", "attachment; filename="+SanitizeFilename(transfer.Filename))
 		return c.SendStream(reader)
 	})
 
@@ -240,12 +258,37 @@ func broadcastdevices() {
 	}
 
 	for _, client := range clients {
+		broadcastMu.Lock()
 		err := client.Conn.WriteJSON(fiber.Map{
 			"event": "devices_update",
 			"users": activeusers,
 		})
+		broadcastMu.Unlock()
 		if err != nil {
 			fmt.Println("Error sending to", client.Name)
 		}
 	}
+}
+
+func SanitizeFilename(input string) string {
+	safeName := filepath.Base(input)
+	if safeName == "." || safeName == string(filepath.Separator) {
+		return "filename"
+	}
+	safeName = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, safeName)
+	safeName = regexp.MustCompile(`[\\/:*?"<>|]`).ReplaceAllString(safeName, "_")
+
+	safeName = strings.TrimSpace(safeName)
+	if safeName == "" {
+		return "filename"
+	}
+	if len(safeName) > 64 {
+		safeName = safeName[:64]
+	}
+	return safeName
 }
