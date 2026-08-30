@@ -5,14 +5,13 @@ import { useDropzone } from "react-dropzone";
 interface DeviceProps {
     device_name: string;
     handle_drop: any;
-    target_device:any;
+    target_device:string;
+    device_ip:string;
 }
 
-export default function Device({device_name, handle_drop, target_device }: DeviceProps) {
-    const [progress, setProgress] = useState(0);
-    const [status, setStatus] = useState('');
-    const serveraddr = 'http://192.168.1.31:3000/upload';
-
+export default function Device({device_name, handle_drop, target_device, device_ip }: DeviceProps) {
+    // const [progress, setProgress] = useState(0);
+    // const [status, setStatus] = useState('');
    
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -24,31 +23,22 @@ export default function Device({device_name, handle_drop, target_device }: Devic
         <section className="flex flex-col gap-2">
             <div 
                 {...getRootProps()} 
-                className={`w-64 h-20 rounded-[10px] border-[2px] overflow-hidden relative cursor-pointer transition-colors ${
-                    isDragActive ? 'border-green-400 bg-[#637aef]' : 'border-black bg-[#536acf]'
-                }`}
-            >
+                className={`min-w-64 p-4 rounded-[10px] border bg-[#4C4C4C] border-black overflow-hidden relative cursor-pointer transition-colors ${
+                    isDragActive ? '' : ''
+            }`}>
                 <input {...getInputProps()} />
-                
-                <div className='w-full h-full flex items-center z-20 relative'>
-                    <div className='bg-[#a3541c] h-full flex-1 flex justify-center items-center'>
-                        <p className='text-center text-white font-semibold'>{device_name}</p>
+                <div className="w-full h-full flex items-center text-white">
+                    <div className="w-full h-full flex-col flex gap-1 flex-3">
+                        <span className="text-[20px] font-med">{device_name}</span>
+                        <span className="text-[12.5px] opacity-80">{device_ip}</span>
                     </div>
-                    <div className='flex justify-between w-full h-full flex-[2] items-center px-4 text-white text-sm'>
-                        <p>{isDragActive ? "Drop it!" : "Drop files to send"}</p>
-                        <p>+</p>
+                    <div className="h-full w-full flex-1">
+                        <div className="aspect-square bg-[#ffffff6f] h-full rounded-[6px]"></div>
                     </div>
                 </div>
 
-                <div 
-                    className="absolute top-0 left-0 h-full bg-green-500/50 z-10 transition-all duration-200 ease-out" 
-                    style={{ width: `${progress}%` }}
-                ></div>
             </div>
-            
-            <p className="text-sm font-medium text-white text-center h-4">
-                {status}
-            </p>
+        
         </section>
     );
 }

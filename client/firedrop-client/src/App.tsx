@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import './App.css'
 import Device from './components/device';
 import axios from 'axios';
+import Request from './components/request';
+import Outgoing from './components/outgoing';
 
 type Device = {
   id:string;
@@ -282,49 +284,30 @@ function App() {
 
   return (
     <>
-      <div className='min-w-screen min-h-screen bg-[#252527] flex flex-row'>
-        <div className='text-white m-12'>
+      <div className='min-w-screen min-h-screen bg-[#242424] flex flex-row justify-center'>
+        <div className='text-white m-12 gap-12 flex'>
           <div className=''>
-            <h1 className='text-3xl mb-6'>Connected devices</h1>
-            <div className='flex-col gap-2 flex ml-2'>
+            <h1 className='text-3xl mb-4'>Devices</h1>
+            <div className='flex-col gap-2 flex'>
                 {devices.map((device) => device.id != own_id && (
-                  <Device key={device.id} handle_drop={handleDrop} target_device={device.id} device_name={device.name} />
+                  <Device key={device.id} handle_drop={handleDrop} device_ip={device.ip} target_device={device.id} device_name={device.name} />
                 ))}
             </div>
           </div>
-          {incomingfilereqs.length>0 && 
           <div>
-            <h1 className='text-3xl mb-6'>File upload requests</h1>
+            <h1 className='text-3xl mb-4 min-w-64'>Requests</h1>
             {
               incomingfilereqs.map((filereq:Filereq)=>(
-                <div  key={filereq.transferid} className=' bg-[#637aef] flex pl-4  justify-between rounded-[5px] items-center'>
-                  <div>
-                    {filereq.filename}
-                    {filereq.senderName.length>0 && 
-                      <h1>from: {filereq.senderName}</h1>
-                    }
-                    {filereq.filetype.startsWith("image")&&
-                      <img src={filereq.preview} className='w-full h-full'/>
-                    }
-                  </div>
-                  <button className='h-full bg-[#cc3636] p-4 cursor-pointer' onClick={()=>handleaccept(filereq)}>Accept</button>
-                  <button className='h-full bg-[#cc3636] p-4 cursor-pointer' onClick={()=>handlereject(filereq)}>Reject</button>
-
-                </div>
+                <Request key={filereq.transferid} filename={filereq.filename} accept={()=>handleaccept(filereq)} reject={()=>handlereject(filereq)} filetype={filereq.filetype} sender={filereq.senderName} />
               ))
             }
           </div>
-          }
           <div>
+            <h1 className='text-3xl mb-4 min-w-64'>Outgoing</h1>
             {
-                outgoingList.map((item)=>(
-                  <div className='bg-amber-300' key={item.transferId}>
-                    <h1>To: {item.targetDeviceName}</h1>
-                    <h1>{item.filename}</h1>
-                    <h1>{item.status}</h1>
-                    {progress.get(item.transferId) && <h1>{progress.get(item.transferId)}</h1>}
-                  </div>
-                ))
+              outgoingList.map((item)=>(
+                <Outgoing progress={progress} status={item.status} key={item.transferId} target={item.targetDeviceName} filename={item.filename} cancel={''} />
+              ))
 
             }
           </div>
