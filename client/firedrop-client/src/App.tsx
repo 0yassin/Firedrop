@@ -282,11 +282,11 @@ function App() {
     }
   }
 
-  return (
+    return (
     <>
-      <div className='min-w-screen min-h-screen bg-[#242424] flex flex-row justify-center'>
-        <div className='text-white m-12 gap-12 flex'>
-          <div className=''>
+      <div className='min-w-screen min-h-screen bg-[#242424] flex justify-center'>
+        <div className='text-white flex flex-col gap-8 p-5 w-full max-w-lg lg:flex-row lg:gap-12 lg:m-12 lg:p-0 lg:w-auto lg:max-w-none'>
+          <div className='w-full lg:w-auto'>
             <h1 className='text-3xl mb-4'>Devices</h1>
             <div className='flex-col gap-2 flex'>
                 {devices.map((device) => device.id != own_id && (
@@ -294,16 +294,16 @@ function App() {
                 ))}
             </div>
           </div>
-          <div>
-            <h1 className='text-3xl mb-4 min-w-64'>Requests</h1>
+          <div className='w-full lg:w-auto'>
+            <h1 className='text-3xl mb-4 lg:min-w-64'>Requests</h1>
             {
               incomingfilereqs.map((filereq:Filereq)=>(
                 <Request key={filereq.transferid} filename={filereq.filename} accept={()=>handleaccept(filereq)} reject={()=>handlereject(filereq)} filetype={filereq.filetype} sender={filereq.senderName} />
               ))
             }
           </div>
-          <div>
-            <h1 className='text-3xl mb-4 min-w-64'>Outgoing</h1>
+          <div className='w-full lg:w-auto'>
+            <h1 className='text-3xl mb-4 lg:min-w-64'>Outgoing</h1>
             {
               outgoingList.map((item)=>(
                 <Outgoing progress={progress} status={item.status} key={item.transferId} target={item.targetDeviceName} filename={item.filename} cancel={''} />

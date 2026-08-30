@@ -12,8 +12,7 @@ export default function Request({filename, accept, reject, filetype, sender}: Re
     return (
         <section className="flex flex-col gap-2">
             <div 
-            className={`min-w-64 rounded-[10px] border bg-[#4C4C4C] border-black overflow-hidden relative cursor-pointer transition-colors`}>
-                <div className="w-full h-full flex items-center flex-col text-white">
+                className={`w-full lg:min-w-64 rounded-[10px] border bg-[#4C4C4C] border-black overflow-hidden relative cursor-pointer transition-colors`}>                <div className="w-full h-full flex items-center flex-col text-white">
                     <div className="w-full h-full flex flex-col px-4 py-3">
                         <span className="text-[20px]">{filename}</span>
                         <div className="flex gap-2 text-[12.5px] opacity-80">
