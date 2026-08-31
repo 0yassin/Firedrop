@@ -1,5 +1,3 @@
-import axios from "axios";
-import { useState } from "react";
 import { useDropzone } from "react-dropzone";
 
 interface DeviceProps {
@@ -10,10 +8,6 @@ interface DeviceProps {
 }
 
 export default function Device({device_name, handle_drop, target_device, device_ip }: DeviceProps) {
-    // const [progress, setProgress] = useState(0);
-    // const [status, setStatus] = useState('');
-   
-
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop: (acceptedFiles) => handle_drop(acceptedFiles[0], target_device),
         multiple: false 
@@ -29,7 +23,7 @@ export default function Device({device_name, handle_drop, target_device, device_
                 <input {...getInputProps()} />
                 <div className="w-full h-full flex items-center text-white">
                     <div className="w-full h-full flex-col flex gap-1 flex-3">
-                        <span className="text-[20px] font-med">{device_name}</span>
+                        <span className="text-[20px] truncate">{device_name}</span>
                         <span className="text-[12.5px] opacity-80">{device_ip}</span>
                     </div>
                     <div className="h-full w-full flex-1">

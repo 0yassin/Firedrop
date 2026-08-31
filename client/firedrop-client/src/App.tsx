@@ -31,14 +31,18 @@ type WSDmsg = {
   senderName?:string;
   filetype?:string;
   preview?:string;
+  status?:string;
+  filesize?: number;
 }
 
 type Filereq = {
   filename: string;
   transferid: string;
   senderName:string;
+  status: string;
   preview?:string;
   filetype?:string;
+  filesize?: number; 
 }
 
 type Outgoingfilereq = {
@@ -52,17 +56,17 @@ type OutgoingItemUI = {
   transferId: string;
   filename: string;
   targetDeviceName: string;
-  status: 'waiting' | 'uploading' | 'done' | 'failed' | 'rejected';
+  status: 'waiting' | 'uploading' | 'done' | 'failed' | 'rejected' | 'canceled';
 };
 
-type WSevent = "devices_update" | "incoming_transfer" | "receiver_ready" | "welcome" | "transfer_rejected"
+type WSevent = "devices_update" | "incoming_transfer" | "receiver_ready" | "welcome" | "transfer_rejected" | "transfer_canceled"
 
 function App() {
-  const [ws, setWs] = useState(null);
+  const [ws, setWs] = useState<WebSocket | null>(null);
+  const [devicename, setdevicename] = useState<string | null>(null);
+  const [devicetype, setdevicetype] = useState<DeviceType | null>(null);
+  const [own_id, setownid] = useState<string | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
-  const [devicename, setdevicename] = useState(null)
-  const [devicetype, setdevicetype] = useState<DeviceType>(null)
-  const [own_id, setownid] = useState(null)
   const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([])
   const api_url = `${import.meta.env.VITE_API_URL}`
   const [progress, setProgress] = useState<Map<string, number>>(new Map());
@@ -103,12 +107,11 @@ function App() {
           break;
 
         case "incoming_transfer":
-          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename || "unknown", transferid: data.transfer_id || "", senderName:data.senderName || "unknown", filetype:data.filetype || "unknown", preview:data.preview || null}]);
+          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename || "unknown", transferid: data.transfer_id || "", senderName:data.senderName || "unknown", filetype:data.filetype || "unknown", preview:data.preview || null, status:data.status || null, filesize: (data as any).filesize || 0,}]);
           break;
 
         case "receiver_ready":
           startaxiosupload(data.transfer_id); 
-          console.log("[DEBUG] 3. Received receiver_ready from server Transfer ID:", data.transfer_id);
           break;
 
         case "welcome":
@@ -118,11 +121,20 @@ function App() {
         case "transfer_rejected":
           if (data.transfer_id) {
             console.log("transfer rejected:", data.transfer_id)
-            outgoingfilereqsRef.current.delete(data.transfer_id)
             setOutgoingList(prev => 
               prev.map(item => item.transferId == data.transfer_id ? {...item, status: 'rejected'} : item)
             );
-          }
+          };
+          break
+
+        case "transfer_canceled":
+          if (data.transfer_id) {
+            console.log("transfer canceled:", data.transfer_id)
+            setincomingfilereqs(prev=>
+              prev.map(item => item.transferid == data.transfer_id ? {...item, status:'canceled'} : item)
+            );
+          };
+          break
 
       }
     };
@@ -178,10 +190,9 @@ function App() {
             filename: file.name,
             filetype: file.type,
             preview: previewData,
+            filesize: file.size,
         }));
     };
-
-
     if (file.type.startsWith("image")){
       const reader = new FileReader()
       reader.readAsDataURL(file)
@@ -216,18 +227,71 @@ function App() {
       finalizeAndSend(null)
     }
   }
+  const handleaccept = async (transfertoaccept: Filereq) => {
+    setincomingfilereqs(prev =>
+      prev.map(item =>
+        item.transferid === transfertoaccept.transferid
+          ? { ...item, status: 'accepted' }
+          : item
+      )
+    );
 
-  const handleaccept = (transfertoaccept:Filereq) => {
-    const iframe = document.createElement("iframe")
-    iframe.style.display = "none"
-    iframe.src = `http://${api_url}/download/${transfertoaccept.transferid}`
-    document.body.appendChild(iframe)
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 60000);
-    setincomingfilereqs(prevItems => prevItems.filter(item => item.transferid != transfertoaccept.transferid))
-  }
+    try {
+      const response = await axios.get(
+        `http://${api_url}/download/${transfertoaccept.transferid}`,
+        {
+          responseType: 'blob',
+          onDownloadProgress: (progressEvent) => {
+            const total = progressEvent.total || transfertoaccept.filesize || 0;
 
+            console.log(
+              `[DOWNLOAD] Loaded: ${progressEvent.loaded}, Total: ${total}, Filesize: ${transfertoaccept.filesize}`
+            );
+
+            if (total > 0) {
+              const percentCompleted = Math.min(
+                100,
+                Math.round((progressEvent.loaded * 100) / total)
+              );
+
+              setProgress(prev => {
+                const next = new Map(prev);
+                next.set(transfertoaccept.transferid, percentCompleted);
+                return next;
+              });
+            }
+          },
+        }
+      );
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', transfertoaccept.filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setincomingfilereqs(prev =>
+        prev.map(item =>
+          item.transferid === transfertoaccept.transferid
+            ? { ...item, status: 'done' }
+            : item
+        )
+      );
+    } catch (error) {
+      console.error('Download failed:', error);
+      setincomingfilereqs(prev =>
+        prev.map(item =>
+          item.transferid === transfertoaccept.transferid
+            ? { ...item, status: 'failed' }
+            : item
+        )
+      );
+    }
+  };
+  
   const handlereject = (transfertoreject:Filereq) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.error("WebSocket is not connected");
@@ -237,35 +301,45 @@ function App() {
       event: "transfer_rejected",
       transfer_id: transfertoreject.transferid,
     }))
-    setincomingfilereqs(prev => prev.filter(item => item.transferid !== transfertoreject.transferid));
+      setincomingfilereqs(prev =>
+        prev.map(item => item.transferid === transfertoreject.transferid ? { ...item, status: 'rejected' } : item)
+      );
   }
 
-  const startaxiosupload = async (transferId) => {
-    const fileToUpload = outgoingfilereqsRef.current?.get(transferId).file;
-
+  const startaxiosupload = async (transferId: string) => {
+    const fileToUpload = outgoingfilereqsRef.current.get(transferId)?.file;
     console.log("[DEBUG] 3.5 startaxiosupload fired. File status:", fileToUpload ? "File exists" : "NULL");
+    
     if (!fileToUpload) {
       console.log("[DEBUG] ERROR: Upload aborted because no file was found in ref");
       return;
     }
+
     setOutgoingList(prev =>
       prev.map(item => item.transferId === transferId ? { ...item, status: 'uploading' } : item)
     );
+
     try {
-        await axios.post(`http://${api_url}/stream/${transferId}`, fileToUpload, {
-        headers:{
+      await axios.post(`http://${api_url}/stream/${transferId}`, fileToUpload, {
+        headers: {
           "Content-Type": fileToUpload.type || "application/octet-stream",
-          
         },
         onUploadProgress: (progressEvent) => {
-          const total = progressEvent.total || 1;
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / total);
-          setProgress(prev => new Map(prev.set(transferId, percentCompleted)));
+          // ✅ FIX: Use fileToUpload.size as the total if progressEvent.total is undefined
+          const total = progressEvent.total || fileToUpload.size || 1;
+          const percentCompleted = Math.min(100, Math.round((progressEvent.loaded * 100) / total));
+
+          setProgress(prev => {
+            const next = new Map(prev);
+            next.set(transferId, percentCompleted);
+            return next;
+          });
+
           console.log(`uploading: ${percentCompleted}%`);
         }
-      })
+      });
 
-      console.log("upload complete")
+      console.log("upload complete");
       outgoingfilereqsRef.current.delete(transferId);
       setOutgoingList(prev => prev.filter(item => item.transferId !== transferId));
       setProgress(prev => {
@@ -273,21 +347,41 @@ function App() {
         next.delete(transferId);
         return next;
       });
-    }
-    catch (e) {
-      console.log("error during upload:", e)
+    } catch (e) {
+      console.log("error during upload:", e);
       setOutgoingList(prev =>
         prev.map(item => item.transferId === transferId ? { ...item, status: 'failed' } : item)
       );
     }
+  };
+
+  const handlecancel = (transferID:string) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket is not connected");
+      return;
+    }
+    ws.send(JSON.stringify({
+      event: "transfer_canceled",
+      transfer_id: transferID,
+    }))
+    setOutgoingList(prev =>
+      prev.map(item => item.transferId === transferID ? { ...item, status: 'canceled' } : item)
+    );
   }
 
-    return (
+  const handledeleteReq = (transferID:string) => {
+    setincomingfilereqs(prev => prev.filter(item => item.transferid !== transferID));
+  }
+  const handledeleteOutgoing= (transferID:string) => {
+    setOutgoingList(prev => prev.filter(item => item.transferId !== transferID));
+  }
+
+  return (
     <>
       <div className='min-w-screen min-h-screen bg-[#242424] flex justify-center'>
         <div className='text-white flex flex-col gap-8 p-5 w-full max-w-lg lg:flex-row lg:gap-12 lg:m-12 lg:p-0 lg:w-auto lg:max-w-none'>
           <div className='w-full lg:w-auto'>
-            <h1 className='text-3xl mb-4'>Devices</h1>
+            <h1 className='text-3xl mb-4 lg:min-w-64'>Devices</h1>
             <div className='flex-col gap-2 flex'>
                 {devices.map((device) => device.id != own_id && (
                   <Device key={device.id} handle_drop={handleDrop} device_ip={device.ip} target_device={device.id} device_name={device.name} />
@@ -298,7 +392,7 @@ function App() {
             <h1 className='text-3xl mb-4 lg:min-w-64'>Requests</h1>
             {
               incomingfilereqs.map((filereq:Filereq)=>(
-                <Request key={filereq.transferid} filename={filereq.filename} accept={()=>handleaccept(filereq)} reject={()=>handlereject(filereq)} filetype={filereq.filetype} sender={filereq.senderName} />
+                <Request deletefunc={()=>handledeleteReq(filereq.transferid)} progress={progress.get(filereq.transferid)} status={filereq.status} key={filereq.transferid} filename={filereq.filename} accept={()=>handleaccept(filereq)} reject={()=>handlereject(filereq)} filetype={filereq.filetype} sender={filereq.senderName} />
               ))
             }
           </div>
@@ -306,7 +400,7 @@ function App() {
             <h1 className='text-3xl mb-4 lg:min-w-64'>Outgoing</h1>
             {
               outgoingList.map((item)=>(
-                <Outgoing progress={progress} status={item.status} key={item.transferId} target={item.targetDeviceName} filename={item.filename} cancel={''} />
+                <Outgoing deletefunc={()=>handledeleteOutgoing(item.transferId)} progress={progress.get(item.transferId)} status={item.status} key={item.transferId} target={item.targetDeviceName} filename={item.filename} cancel={()=>handlecancel(item.transferId)} />
               ))
 
             }

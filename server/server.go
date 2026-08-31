@@ -34,6 +34,7 @@ type WsMsg struct {
 	Filename   string `json:"filename"`
 	Filetype   string `json:"filetype"`
 	Preview    string `json:"preview"`
+	Filesize   int64  `json:"filesize"`
 }
 
 type Transfer struct {
@@ -43,6 +44,7 @@ type Transfer struct {
 	TransferID string
 	Writer     *io.PipeWriter
 	Age        time.Time
+	Filesize   int64
 }
 
 var transfers = make(map[string]*Transfer)
@@ -138,6 +140,7 @@ func main() {
 						Filename:   message.Filename,
 						TransferID: message.TransferID,
 						Age:        time.Now(),
+						Filesize:   message.Filesize,
 					}
 					transfersMu.Unlock()
 
@@ -151,6 +154,8 @@ func main() {
 							"senderName":  clients[id].Name,
 							"filetype":    message.Filetype,
 							"preview":     message.Preview,
+							"status":      "waiting",
+							"filesize":    message.Filesize,
 						})
 						fmt.Printf("Alerted %s about transfer %s\n", target.Name, message.TransferID)
 					}
@@ -173,6 +178,29 @@ func main() {
 						})
 					}
 					transfersMu.Lock()
+					delete(transfers, message.TransferID)
+					transfersMu.Unlock()
+
+				case "transfer_canceled":
+					transfersMu.Lock()
+					transfer, exists := transfers[message.TransferID]
+					transfersMu.Unlock()
+					if !exists {
+						break
+					}
+					clientsMu.RLock()
+					targetConn, ok := clients[transfer.ReceiverID]
+					if ok {
+						targetConn.WriteJSON(WsMsg{
+							Event:      "transfer_canceled",
+							TransferID: transfer.TransferID,
+						})
+					}
+					clientsMu.RUnlock()
+					transfersMu.Lock()
+					if transfer.Writer != nil {
+						transfer.Writer.Close()
+					}
 					delete(transfers, message.TransferID)
 					transfersMu.Unlock()
 
@@ -202,7 +230,6 @@ func main() {
 		}
 		bytesWritten, err := io.Copy(transfer.Writer, bodystream)
 		if err != nil {
-			fmt.Println("[DEBUG] Failed to copy stream", err)
 			transfer.Writer.CloseWithError(err)
 			return fiber.NewError(fiber.StatusInternalServerError, "Failed to copy stream")
 		}
@@ -250,6 +277,9 @@ func main() {
 		}
 
 		c.Set("Content-Disposition", "attachment; filename="+SanitizeFilename(transfer.Filename))
+		if transfer.Filesize > 0 {
+			c.Set("Content-Length", fmt.Sprintf("%d", transfer.Filesize))
+		}
 		return c.SendStream(reader)
 	})
 
