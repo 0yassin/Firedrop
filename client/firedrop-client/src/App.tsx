@@ -8,7 +8,7 @@ import Outgoing from './components/outgoing';
 type Device = {
   id:string;
   name: string;
-  typ: string;
+  type: string;
   ip: string;
 }
 
@@ -400,7 +400,7 @@ function App() {
               </section>
 
               {devices.map((device) => device.id != own_id && (
-                <Device key={device.id} device_type={device.typ} handle_drop={handleDrop} device_ip={device.ip} target_device={device.id} device_name={device.name} />
+                <Device key={device.id} device_type={device.type} handle_drop={handleDrop} device_ip={device.ip} target_device={device.id} device_name={device.name} />
               ))}
             </div>
           </div>

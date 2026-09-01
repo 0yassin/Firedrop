@@ -18,7 +18,7 @@ export default function Device({device_type, device_name, handle_drop, target_de
         <section className="flex flex-col gap-2">
             <div 
                 {...getRootProps()} 
-                className={`w-full lg:min-w-64 rounded-[10px] border border- bg-[#4C4C4C] hover:opacity-75 transition-all overflow-hidden relative cursor-pointer ${
+                className={`w-full lg:min-w-64 rounded-[10px] border border- bg-[#4C4C4C] hover:bg-[#434343] transition-all overflow-hidden relative cursor-pointer ${
                     isDragActive ? 'border-[#ffffff]' : 'border-black'
                 }`}>
                 <input {...getInputProps()} />
@@ -27,8 +27,8 @@ export default function Device({device_type, device_name, handle_drop, target_de
                         <span className="text-[20px] truncate">{device_name}</span>
                         <span className="text-[12.5px] opacity-80">{device_ip}</span>
                     </div>
-                    <div className="bg-[#4C4C4C] rounded-r-[10px] aspect-square p-5 w-21 shrink-0 flex items-center justify-center cursor-pointer hover:bg-[#434343] transition-colors">
-                        <img className='w-full h-full ' src={`./src/assets/${device_type || 'unknown'}.svg`} />
+                    <div className="bg-transparent rounded-r-[10px] aspect-square p-5 w-21 shrink-0 flex items-center justify-center cursor-pointer transition-colors">
+                        <img className='w-full h-full ' src={`./src/assets/${device_type || "Unknown"}.svg`} />
                     </div>
 
                     
