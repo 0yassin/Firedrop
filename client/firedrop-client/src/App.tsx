@@ -325,10 +325,8 @@ function App() {
           "Content-Type": fileToUpload.type || "application/octet-stream",
         },
         onUploadProgress: (progressEvent) => {
-          // ✅ FIX: Use fileToUpload.size as the total if progressEvent.total is undefined
           const total = progressEvent.total || fileToUpload.size || 1;
           const percentCompleted = Math.min(100, Math.round((progressEvent.loaded * 100) / total));
-
           setProgress(prev => {
             const next = new Map(prev);
             next.set(transferId, percentCompleted);
@@ -338,7 +336,6 @@ function App() {
           console.log(`uploading: ${percentCompleted}%`);
         }
       });
-
       console.log("upload complete");
       outgoingfilereqsRef.current.delete(transferId);
       setOutgoingList(prev => prev.filter(item => item.transferId !== transferId));
@@ -383,9 +380,28 @@ function App() {
           <div className='w-full lg:w-auto'>
             <h1 className='text-3xl mb-4 lg:min-w-64'>Devices</h1>
             <div className='flex-col gap-2 flex'>
-                {devices.map((device) => device.id != own_id && (
-                  <Device key={device.id} handle_drop={handleDrop} device_ip={device.ip} target_device={device.id} device_name={device.name} />
-                ))}
+              <section className="flex flex-col gap-2">
+                <div className="w-full lg:min-w-64 rounded-[10px] border bg-[#006239] border-black transition-colors flex justify-between items-stretch min-h-17">
+                  
+                  <div className="flex flex-col justify-center px-4 py-4 text-white min-w-0 flex-1">
+                    <span className="text-[20px] truncate font-medium">
+                      {devicename || "My Device"} (You)
+                    </span>
+                    <span className="text-[12.5px] opacity-80">
+                      {devicetype || "Unknown"}
+                    </span>
+                  </div>
+
+                  <div className="bg-[#4C4C4C] rounded-r-[10px] aspect-square border-l p-5 border-black w-21 shrink-0 flex items-center justify-center cursor-pointer hover:bg-[#434343] transition-colors">
+                    <img className='w-full h-full ' src='./src/assets/settings.svg' />
+                  </div>
+
+                </div>
+              </section>
+
+              {devices.map((device) => device.id != own_id && (
+                <Device key={device.id} device_type={device.typ} handle_drop={handleDrop} device_ip={device.ip} target_device={device.id} device_name={device.name} />
+              ))}
             </div>
           </div>
           <div className='w-full lg:w-auto'>
