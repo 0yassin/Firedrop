@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
 .counter {
   font-size: 16px;
   padding: 5px 10px;
@@ -183,4 +185,12 @@
     right: 0;
     border-right-color: var(--border);
   }
+}
+
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
 }

@@ -27,14 +27,20 @@ type Client struct {
 	mu   sync.Mutex
 }
 
+type Settings struct {
+	Name string `json:"name"`
+}
+
 type WsMsg struct {
-	Event      string `json:"event"`
-	TargetID   string `json:"target_id"`
-	TransferID string `json:"transfer_id"`
-	Filename   string `json:"filename"`
-	Filetype   string `json:"filetype"`
-	Preview    string `json:"preview"`
-	Filesize   int64  `json:"filesize"`
+	Event      string    `json:"event"`
+	TargetID   string    `json:"target_id,omitempty"`
+	TransferID string    `json:"transfer_id,omitempty"`
+	Filename   string    `json:"filename,omitempty"`
+	Filetype   string    `json:"filetype,omitempty"`
+	Preview    string    `json:"preview,omitempty"`
+	Filesize   int64     `json:"filesize,omitempty"`
+	Name       string    `json:"name,omitempty"`
+	Settings   *Settings `json:"settings,omitempty"`
 }
 
 type Transfer struct {
@@ -54,13 +60,14 @@ var clients = make(map[string]*Client)
 var clientsMu sync.RWMutex
 
 func main() {
-
 	port := "3000"
-	fmt.Printf("current IP:%s:%s", getaddr(), port)
+	fmt.Printf("Server starting at http://%s:%s\n", getaddr(), port)
+
 	app := fiber.New(fiber.Config{
 		StreamRequestBody: true,
 	})
 	app.Use(cors.New())
+
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -68,47 +75,56 @@ func main() {
 			transfersMu.Lock()
 			for transferid, transfer := range transfers {
 				if time.Since(transfer.Age) > 5*time.Minute {
+					if transfer.Writer != nil {
+						transfer.Writer.CloseWithError(fmt.Errorf("transfer timed out"))
+					}
 					delete(transfers, transferid)
 				}
 			}
 			transfersMu.Unlock()
 		}
 	}()
+
 	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
 		var id string = uuid.New().String()
-		defaultName := fmt.Sprintf("device-%d", len(clients))
+		defaultName := fmt.Sprintf("device-%d", len(clients)+1)
+
+		name := strings.TrimSpace(c.Query("name"))
+		if name == "" {
+			name = defaultName
+		}
 
 		clientsMu.Lock()
 		clients[id] = &Client{
 			ID:   id,
-			Name: c.Query("name", defaultName),
+			Name: name,
 			Conn: c,
 			typ:  c.Query("type", "unknown"),
 			ip:   c.IP(),
 		}
-
 		clientsMu.Unlock()
+
 		clients[id].WriteJSON(fiber.Map{
 			"event": "welcome",
 			"id":    id,
 		})
 		broadcastdevices()
-		fmt.Printf("A new device just connected, ID: %s \n", id)
+		fmt.Printf("Device connected: %s (ID: %s)\n", name, id)
 
 		for {
 			msgType, msg, err := c.ReadMessage()
 
 			if err != nil {
 				transfersMu.Lock()
-
 				for transferid, transfer := range transfers {
 					if transfer.SenderID == id {
+						clientsMu.RLock()
 						client, exists := clients[transfer.ReceiverID]
+						clientsMu.RUnlock()
 						if exists {
 							client.WriteJSON(fiber.Map{
-								"event":       "sender_disconnected",
+								"event":       "transfer_canceled",
 								"transfer_id": transferid,
-								"filename":    transfer.Filename,
 							})
 						}
 						if transfer.Writer != nil {
@@ -116,12 +132,31 @@ func main() {
 						}
 						delete(transfers, transferid)
 					}
+
+					if transfer.ReceiverID == id {
+						clientsMu.RLock()
+						client, exists := clients[transfer.SenderID]
+						clientsMu.RUnlock()
+						if exists {
+							client.WriteJSON(fiber.Map{
+								"event":       "transfer_canceled",
+								"transfer_id": transferid,
+							})
+						}
+						if transfer.Writer != nil {
+							transfer.Writer.CloseWithError(fmt.Errorf("receiver disconnected"))
+						}
+						delete(transfers, transferid)
+					}
 				}
 				transfersMu.Unlock()
+
 				clientsMu.Lock()
 				delete(clients, id)
 				clientsMu.Unlock()
+
 				broadcastdevices()
+				fmt.Printf("Device disconnected: %s (ID: %s)\n", name, id)
 				break
 			}
 
@@ -131,6 +166,7 @@ func main() {
 					fmt.Println("Invalid JSON received:", err)
 					continue
 				}
+
 				switch message.Event {
 				case "upload_request":
 					transfersMu.Lock()
@@ -146,117 +182,140 @@ func main() {
 
 					clientsMu.RLock()
 					target, exists := clients[message.TargetID]
+					senderName := clients[id].Name
+					clientsMu.RUnlock()
+
 					if exists {
 						target.WriteJSON(fiber.Map{
 							"event":       "incoming_transfer",
 							"transfer_id": message.TransferID,
 							"filename":    message.Filename,
-							"senderName":  clients[id].Name,
+							"senderName":  senderName,
 							"filetype":    message.Filetype,
 							"preview":     message.Preview,
 							"status":      "waiting",
 							"filesize":    message.Filesize,
 						})
-						fmt.Printf("Alerted %s about transfer %s\n", target.Name, message.TransferID)
+						fmt.Printf("Transfer request from %s to %s for file: %s\n", senderName, target.Name, message.Filename)
 					}
-					clientsMu.RUnlock()
 
 				case "transfer_rejected":
 					transfersMu.Lock()
 					transfer, exists := transfers[message.TransferID]
+					if exists {
+						delete(transfers, message.TransferID)
+					}
 					transfersMu.Unlock()
+
 					if !exists {
 						break
 					}
-					clientsMu.Lock()
+
+					clientsMu.RLock()
 					senderConn, ok := clients[transfer.SenderID]
-					clientsMu.Unlock()
+					clientsMu.RUnlock()
+
 					if ok {
-						senderConn.WriteJSON(WsMsg{
-							Event:      "transfer_rejected",
-							TransferID: transfer.TransferID,
+						senderConn.WriteJSON(fiber.Map{
+							"event":       "transfer_rejected",
+							"transfer_id": transfer.TransferID,
 						})
 					}
-					transfersMu.Lock()
-					delete(transfers, message.TransferID)
-					transfersMu.Unlock()
 
 				case "transfer_canceled":
 					transfersMu.Lock()
 					transfer, exists := transfers[message.TransferID]
+					if exists {
+						if transfer.Writer != nil {
+							transfer.Writer.Close()
+						}
+						delete(transfers, message.TransferID)
+					}
 					transfersMu.Unlock()
+
 					if !exists {
 						break
 					}
+
 					clientsMu.RLock()
 					targetConn, ok := clients[transfer.ReceiverID]
+					clientsMu.RUnlock()
+
 					if ok {
-						targetConn.WriteJSON(WsMsg{
-							Event:      "transfer_canceled",
-							TransferID: transfer.TransferID,
+						targetConn.WriteJSON(fiber.Map{
+							"event":       "transfer_canceled",
+							"transfer_id": transfer.TransferID,
 						})
 					}
-					clientsMu.RUnlock()
-					transfersMu.Lock()
-					if transfer.Writer != nil {
-						transfer.Writer.Close()
-					}
-					delete(transfers, message.TransferID)
-					transfersMu.Unlock()
 
+				case "settings_update", "update_settings":
+					newName := strings.TrimSpace(message.Name)
+					if newName == "" && message.Settings != nil {
+						newName = strings.TrimSpace(message.Settings.Name)
+					}
+
+					if newName != "" {
+						clientsMu.Lock()
+						if client, exists := clients[id]; exists {
+							client.Name = newName
+							fmt.Printf("Device %s renamed to: %s\n", id, newName)
+						}
+						clientsMu.Unlock()
+						broadcastdevices()
+					}
 				}
 			}
 		}
 	}))
 
 	app.Get("/", func(c fiber.Ctx) error {
-		return c.SendFile("dist/main.html")
+		return c.SendFile("dist/index.html")
 	})
 
 	app.Post("/stream/:transferID", func(c fiber.Ctx) error {
 		transferid := c.Params("transferID")
-		fmt.Printf("[DEBUG] 4. Sender hit POST /stream for transfer: %s\n", transferid)
 		transfersMu.Lock()
 		transfer, exists := transfers[transferid]
 		transfersMu.Unlock()
-		if !exists || transfer.Writer == nil {
 
+		if !exists || transfer.Writer == nil {
 			return fiber.NewError(fiber.StatusNotFound, "Receiver not ready")
 		}
+
 		defer transfer.Writer.Close()
 		bodystream := c.RequestCtx().RequestBodyStream()
 		if bodystream == nil {
 			return fiber.NewError(fiber.StatusBadRequest, "No body provided")
 		}
+
 		bytesWritten, err := io.Copy(transfer.Writer, bodystream)
 		if err != nil {
 			transfer.Writer.CloseWithError(err)
 			return fiber.NewError(fiber.StatusInternalServerError, "Failed to copy stream")
 		}
+
 		transfersMu.Lock()
 		delete(transfers, transferid)
 		transfersMu.Unlock()
 
-		fmt.Printf("streamed %d \n", bytesWritten)
+		fmt.Printf("Streamed %d bytes for transfer %s\n", bytesWritten, transferid)
 		return c.SendStatus(200)
 	})
 
 	app.Get("/download/:transferID", func(c fiber.Ctx) error {
-
 		transferID := c.Params("transferID")
-		fmt.Printf("[DEBUG] 1. Receiver requested download for transfer: %s\n", transferID)
 
 		transfersMu.Lock()
 		transfer, exists := transfers[transferID]
 		if !exists {
 			transfersMu.Unlock()
-			fmt.Println("[DEBUG] ERROR: Transfer not found during download")
 			return fiber.NewError(fiber.StatusNotFound, "Transfer not found")
 		}
 
 		reader, writer := io.Pipe()
 		transfer.Writer = writer
 		transfersMu.Unlock()
+
 		go func() {
 			<-c.Context().Done()
 			writer.CloseWithError(fmt.Errorf("receiver canceled download"))
@@ -267,30 +326,27 @@ func main() {
 		clientsMu.RUnlock()
 
 		if senderExists {
-			fmt.Printf("[DEBUG] 2. Alerting Sender (%s) that Receiver is ready\n", sender.Name)
 			sender.WriteJSON(fiber.Map{
 				"event":       "receiver_ready",
 				"transfer_id": transferID,
 			})
-		} else {
-			fmt.Println("[DEBUG] ERROR: Sender disconnected before download started")
 		}
 
 		c.Set("Content-Disposition", "attachment; filename="+SanitizeFilename(transfer.Filename))
 		if transfer.Filesize > 0 {
 			c.Set("Content-Length", fmt.Sprintf("%d", transfer.Filesize))
 		}
+
 		return c.SendStream(reader)
 	})
 
 	log.Fatal(app.Listen(":" + port))
-
 }
 
 func getaddr() string {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
-		log.Fatal(err)
+		return "127.0.0.1"
 	}
 	defer conn.Close()
 
@@ -300,8 +356,8 @@ func getaddr() string {
 func broadcastdevices() {
 	clientsMu.RLock()
 	defer clientsMu.RUnlock()
-	var activeusers []fiber.Map
 
+	var activeusers []fiber.Map
 	for _, client := range clients {
 		activeusers = append(activeusers, fiber.Map{
 			"id":   client.ID,
@@ -312,13 +368,10 @@ func broadcastdevices() {
 	}
 
 	for _, client := range clients {
-		err := client.WriteJSON(fiber.Map{
+		client.WriteJSON(fiber.Map{
 			"event": "devices_update",
 			"users": activeusers,
 		})
-		if err != nil {
-			fmt.Println("Error sending to", client.Name)
-		}
 	}
 }
 

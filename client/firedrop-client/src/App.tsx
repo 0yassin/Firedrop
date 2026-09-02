@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import './App.css'
+import './App.css';
 import Device from './components/device';
 import axios from 'axios';
 import Request from './components/request';
 import Outgoing from './components/outgoing';
+import Settings from './components/Settings';
 
 type Device = {
-  id:string;
+  id: string;
   name: string;
   type: string;
   ip: string;
-}
+};
 
 type DeviceType = 
   | 'iPhone' 
@@ -25,32 +26,32 @@ type DeviceType =
 type WSDmsg = {
   event: WSevent;
   users?: Device[];
-  filename?:string;
-  transfer_id?:string;
-  id?:string;
-  senderName?:string;
-  filetype?:string;
-  preview?:string;
-  status?:string;
+  filename?: string;
+  transfer_id?: string;
+  id?: string;
+  senderName?: string;
+  filetype?: string;
+  preview?: string;
+  status?: string;
   filesize?: number;
-}
+};
 
 type Filereq = {
   filename: string;
   transferid: string;
-  senderName:string;
+  senderName: string;
   status: string;
-  preview?:string;
-  filetype?:string;
+  preview?: string;
+  filetype?: string;
   filesize?: number; 
-}
+};
 
 type Outgoingfilereq = {
   targetdevice: string;
   file: File;
   filetype: string;
   preview?: string;
-}
+};
 
 type OutgoingItemUI = {
   transferId: string;
@@ -59,22 +60,44 @@ type OutgoingItemUI = {
   status: 'waiting' | 'uploading' | 'done' | 'failed' | 'rejected' | 'canceled';
 };
 
-type WSevent = "devices_update" | "incoming_transfer" | "receiver_ready" | "welcome" | "transfer_rejected" | "transfer_canceled"
+type WSevent = 
+  | "devices_update" 
+  | "incoming_transfer" 
+  | "receiver_ready" 
+  | "welcome" 
+  | "transfer_rejected" 
+  | "transfer_canceled";
 
 function App() {
   const [ws, setWs] = useState<WebSocket | null>(null);
-  const [devicename, setdevicename] = useState<string | null>(null);
+  const [devicename, setdevicename] = useState<string | null>(() => {
+    try {
+      const savedname = localStorage.getItem('device-name');
+      return savedname ? JSON.parse(savedname) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [settingsvisible, setsettingsvisible] = useState<boolean>(false);
+  const [newName, setnewName] = useState<string>("");
   const [devicetype, setdevicetype] = useState<DeviceType | null>(null);
   const [own_id, setownid] = useState<string | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
-  const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([])
-  const api_url = `${import.meta.env.VITE_API_URL}`
+  const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([]);
+  const api_url = `${import.meta.env.VITE_API_URL}`;
   const [progress, setProgress] = useState<Map<string, number>>(new Map());
-  const outgoingfilereqsRef = useRef<Map<string, Outgoingfilereq>>(new Map())
+  const outgoingfilereqsRef = useRef<Map<string, Outgoingfilereq>>(new Map());
   const [outgoingList, setOutgoingList] = useState<OutgoingItemUI[]>([]);
-  const logging = true
-  const maxHeight = 100
-  const maxWidth = 100
+  const logging = true;
+  const maxHeight = 100;
+  const maxWidth = 100;
+
+  useEffect(() => {
+    if (devicename) {
+      localStorage.setItem('device-name', JSON.stringify(devicename));
+    }
+  }, [devicename]);
 
   useEffect(() => {
     if (!logging) return;
@@ -84,7 +107,7 @@ function App() {
     console.log("[OWNID] - ", own_id);
     console.log("[OUTGOINGFILEREQS] - ", outgoingfilereqsRef.current);
     console.log("[PROGRESS] - ", progress);
-    console.log(api_url)
+    console.log(api_url);
   }, [devices, devicename, devicetype, own_id, progress, logging]);
 
   useEffect(() => {
@@ -107,35 +130,45 @@ function App() {
           break;
 
         case "incoming_transfer":
-          setincomingfilereqs(prevItems => [...prevItems, {filename: data.filename || "unknown", transferid: data.transfer_id || "", senderName:data.senderName || "unknown", filetype:data.filetype || "unknown", preview:data.preview || null, status:data.status || null, filesize: (data as any).filesize || 0,}]);
+          setincomingfilereqs(prevItems => [
+            ...prevItems, 
+            {
+              filename: data.filename || "unknown", 
+              transferid: data.transfer_id || "", 
+              senderName: data.senderName || "unknown", 
+              filetype: data.filetype || "unknown", 
+              preview: data.preview || null, 
+              status: data.status || null, 
+              filesize: data.filesize || 0,
+            }
+          ]);
           break;
 
         case "receiver_ready":
-          startaxiosupload(data.transfer_id); 
+          if (data.transfer_id) startaxiosupload(data.transfer_id); 
           break;
 
         case "welcome":
-          setownid(data.id);
+          if (data.id) setownid(data.id);
           break;
         
         case "transfer_rejected":
           if (data.transfer_id) {
-            console.log("transfer rejected:", data.transfer_id)
+            console.log("transfer rejected:", data.transfer_id);
             setOutgoingList(prev => 
-              prev.map(item => item.transferId == data.transfer_id ? {...item, status: 'rejected'} : item)
+              prev.map(item => item.transferId === data.transfer_id ? {...item, status: 'rejected'} : item)
             );
-          };
-          break
+          }
+          break;
 
         case "transfer_canceled":
           if (data.transfer_id) {
-            console.log("transfer canceled:", data.transfer_id)
-            setincomingfilereqs(prev=>
-              prev.map(item => item.transferid == data.transfer_id ? {...item, status:'canceled'} : item)
+            console.log("transfer canceled:", data.transfer_id);
+            setincomingfilereqs(prev =>
+              prev.map(item => item.transferid === data.transfer_id ? {...item, status: 'canceled'} : item)
             );
-          };
-          break
-
+          }
+          break;
       }
     };
 
@@ -161,7 +194,7 @@ function App() {
     return 'Unknown';
   }
 
-  const handleDrop = (file:File, targetDeviceID:string) => {
+  const handleDrop = (file: File, targetDeviceID: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.error("WebSocket is not connected");
       return;
@@ -170,37 +203,38 @@ function App() {
     const transferId = crypto.randomUUID();
 
     const finalizeAndSend = (previewData: string | null) => {
-        outgoingfilereqsRef.current.set(transferId, {
-            targetdevice: targetDeviceID,
-            file: file,
-            filetype: file.type
-        });
-        
-        setOutgoingList(prev => [...prev, {
-            transferId,
-            filename: file.name,
-            targetDeviceName: targetDevice?.name || "unknown",
-            status: 'waiting',
-        }]);
+      outgoingfilereqsRef.current.set(transferId, {
+        targetdevice: targetDeviceID,
+        file: file,
+        filetype: file.type
+      });
+      
+      setOutgoingList(prev => [...prev, {
+        transferId,
+        filename: file.name,
+        targetDeviceName: targetDevice?.name || "unknown",
+        status: 'waiting',
+      }]);
 
-        ws.send(JSON.stringify({
-            event: "upload_request",
-            target_id: targetDeviceID,
-            transfer_id: transferId,
-            filename: file.name,
-            filetype: file.type,
-            preview: previewData,
-            filesize: file.size,
-        }));
+      ws.send(JSON.stringify({
+        event: "upload_request",
+        target_id: targetDeviceID,
+        transfer_id: transferId,
+        filename: file.name,
+        filetype: file.type,
+        preview: previewData,
+        filesize: file.size,
+      }));
     };
-    if (file.type.startsWith("image")){
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
+
+    if (file.type.startsWith("image")) {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
       reader.onload = (event) => {
-        const img = new Image()
-        img.src = event.target?.result as string
+        const img = new Image();
+        img.src = event.target?.result as string;
         img.onload = () => {
-          const canvas = document.createElement("canvas")
+          const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
           if (width > height) {
@@ -208,25 +242,25 @@ function App() {
               height = Math.round((height * maxWidth) / width);
               width = maxWidth;
             }
-          } 
-          else {
+          } else {
             if (height > maxHeight) {
               width = Math.round((width * maxHeight) / height);
               height = maxHeight;
             }
           }
           canvas.width = width;
-          canvas.height = height
+          canvas.height = height;
 
           const ctx = canvas.getContext("2d");
           ctx?.drawImage(img, 0, 0, width, height);
-          finalizeAndSend(canvas.toDataURL("image/jpeg", 0.8))
-        }
-      }
+          finalizeAndSend(canvas.toDataURL("image/jpeg", 0.8));
+        };
+      };
     } else {
-      finalizeAndSend(null)
+      finalizeAndSend(null);
     }
-  }
+  };
+
   const handleaccept = async (transfertoaccept: Filereq) => {
     setincomingfilereqs(prev =>
       prev.map(item =>
@@ -243,10 +277,6 @@ function App() {
           responseType: 'blob',
           onDownloadProgress: (progressEvent) => {
             const total = progressEvent.total || transfertoaccept.filesize || 0;
-
-            console.log(
-              `[DOWNLOAD] Loaded: ${progressEvent.loaded}, Total: ${total}, Filesize: ${transfertoaccept.filesize}`
-            );
 
             if (total > 0) {
               const percentCompleted = Math.min(
@@ -292,7 +322,7 @@ function App() {
     }
   };
   
-  const handlereject = (transfertoreject:Filereq) => {
+  const handlereject = (transfertoreject: Filereq) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.error("WebSocket is not connected");
       return;
@@ -300,16 +330,14 @@ function App() {
     ws.send(JSON.stringify({
       event: "transfer_rejected",
       transfer_id: transfertoreject.transferid,
-    }))
-      setincomingfilereqs(prev =>
-        prev.map(item => item.transferid === transfertoreject.transferid ? { ...item, status: 'rejected' } : item)
-      );
-  }
+    }));
+    setincomingfilereqs(prev =>
+      prev.map(item => item.transferid === transfertoreject.transferid ? { ...item, status: 'rejected' } : item)
+    );
+  };
 
   const startaxiosupload = async (transferId: string) => {
     const fileToUpload = outgoingfilereqsRef.current.get(transferId)?.file;
-    console.log("[DEBUG] 3.5 startaxiosupload fired. File status:", fileToUpload ? "File exists" : "NULL");
-    
     if (!fileToUpload) {
       console.log("[DEBUG] ERROR: Upload aborted because no file was found in ref");
       return;
@@ -332,8 +360,6 @@ function App() {
             next.set(transferId, percentCompleted);
             return next;
           });
-
-          console.log(`uploading: ${percentCompleted}%`);
         }
       });
       console.log("upload complete");
@@ -352,7 +378,7 @@ function App() {
     }
   };
 
-  const handlecancel = (transferID:string) => {
+  const handlecancel = (transferID: string) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.error("WebSocket is not connected");
       return;
@@ -360,26 +386,53 @@ function App() {
     ws.send(JSON.stringify({
       event: "transfer_canceled",
       transfer_id: transferID,
-    }))
+    }));
     setOutgoingList(prev =>
       prev.map(item => item.transferId === transferID ? { ...item, status: 'canceled' } : item)
     );
-  }
+  };
 
-  const handledeleteReq = (transferID:string) => {
+  const handledeleteReq = (transferID: string) => {
     setincomingfilereqs(prev => prev.filter(item => item.transferid !== transferID));
-  }
-  const handledeleteOutgoing= (transferID:string) => {
+  };
+
+  const handledeleteOutgoing = (transferID: string) => {
     setOutgoingList(prev => prev.filter(item => item.transferId !== transferID));
-  }
+  };
+
+  const handlenamechange = (nameToSet: string) => {
+    const trimmed = nameToSet.trim();
+    if (!trimmed) return;
+
+    setdevicename(trimmed);
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        event: "update_settings",
+        settings: {
+          name: trimmed,
+        }
+      }));
+    }
+  };
 
   return (
     <>
       <div className='min-w-screen min-h-screen bg-[#242424] flex justify-center'>
+        <Settings 
+          visible={settingsvisible} 
+          setvisible={setsettingsvisible} 
+          handlenamechange={() => handlenamechange(newName)} 
+          newName={newName} 
+          setnewName={setnewName}
+        />
+
         <div className='text-white flex flex-col gap-8 p-5 w-full max-w-lg lg:flex-row lg:gap-12 lg:m-12 lg:p-0 lg:w-auto lg:max-w-none'>
+          
           <div className='w-full lg:w-auto'>
-            <h1 className='text-3xl mb-4 lg:min-w-64'>Devices</h1>
+            <h1 className='text-3xl mb-4 lg:min-w-64 font-semibold '>Devices</h1>
             <div className='flex-col gap-2 flex'>
+              
               <section className="flex flex-col gap-2">
                 <div className="w-full lg:min-w-64 rounded-[10px] border bg-[#006239] border-black transition-colors flex justify-between items-stretch min-h-17">
                   
@@ -391,40 +444,67 @@ function App() {
                       {devicetype || "Unknown"}
                     </span>
                   </div>
-
-                  <div className="bg-[#4C4C4C] rounded-r-[10px] aspect-square border-l p-5 border-black w-21 shrink-0 flex items-center justify-center cursor-pointer hover:bg-[#434343] transition-colors">
-                    <img className='w-full h-full ' src='./src/assets/settings.svg' />
+                  <div 
+                    onClick={() => {
+                      setnewName(devicename || "");
+                      setsettingsvisible(true);
+                    }}
+                    className="bg-[#4C4C4C] rounded-r-[10px] aspect-square border-l p-5 border-black w-21 shrink-0 flex items-center justify-center cursor-pointer hover:bg-[#434343] transition-colors"
+                  >
+                    <img className='w-full h-full' src='./src/assets/settings.svg' alt="Settings" />
                   </div>
 
                 </div>
               </section>
-
-              {devices.map((device) => device.id != own_id && (
-                <Device key={device.id} device_type={device.type} handle_drop={handleDrop} device_ip={device.ip} target_device={device.id} device_name={device.name} />
+              {devices.map((device) => device.id !== own_id && (
+                <Device 
+                  key={device.id} 
+                  device_type={device.type} 
+                  handle_drop={handleDrop} 
+                  device_ip={device.ip} 
+                  target_device={device.id} 
+                  device_name={device.name} 
+                />
               ))}
             </div>
           </div>
-          <div className='w-full lg:w-auto'>
-            <h1 className='text-3xl mb-4 lg:min-w-64'>Requests</h1>
-            {
-              incomingfilereqs.map((filereq:Filereq)=>(
-                <Request deletefunc={()=>handledeleteReq(filereq.transferid)} progress={progress.get(filereq.transferid)} status={filereq.status} key={filereq.transferid} filename={filereq.filename} accept={()=>handleaccept(filereq)} reject={()=>handlereject(filereq)} filetype={filereq.filetype} sender={filereq.senderName} />
-              ))
-            }
-          </div>
-          <div className='w-full lg:w-auto'>
-            <h1 className='text-3xl mb-4 lg:min-w-64'>Outgoing</h1>
-            {
-              outgoingList.map((item)=>(
-                <Outgoing deletefunc={()=>handledeleteOutgoing(item.transferId)} progress={progress.get(item.transferId)} status={item.status} key={item.transferId} target={item.targetDeviceName} filename={item.filename} cancel={()=>handlecancel(item.transferId)} />
-              ))
 
-            }
+          <div className='w-full lg:w-auto'>
+            <h1 className='text-3xl mb-4 lg:min-w-64 font-semibold'>Requests</h1>
+            {incomingfilereqs.map((filereq: Filereq) => (
+              <Request 
+                key={filereq.transferid}
+                filename={filereq.filename}
+                sender={filereq.senderName}
+                filetype={filereq.filetype}
+                status={filereq.status}
+                progress={progress.get(filereq.transferid)}
+                accept={() => handleaccept(filereq)}
+                reject={() => handlereject(filereq)}
+                deletefunc={() => handledeleteReq(filereq.transferid)}
+              />
+            ))}
           </div>
+
+          <div className='w-full lg:w-auto'>
+            <h1 className='text-3xl mb-4 lg:min-w-64 font-semibold'>Outgoing</h1>
+            {outgoingList.map((item) => (
+              <Outgoing 
+                key={item.transferId}
+                filename={item.filename}
+                target={item.targetDeviceName}
+                status={item.status}
+                progress={progress.get(item.transferId)}
+                cancel={() => handlecancel(item.transferId)}
+                deletefunc={() => handledeleteOutgoing(item.transferId)}
+              />
+            ))}
+          </div>
+
         </div>
       </div>
     </>
-  )
+  );
 }
 
-export default App
+export default App;
