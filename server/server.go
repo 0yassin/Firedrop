@@ -1,9 +1,11 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/fiber/v3/middleware/static"
 	"github.com/google/uuid"
 )
 
@@ -59,9 +62,12 @@ var transfersMu sync.RWMutex
 var clients = make(map[string]*Client)
 var clientsMu sync.RWMutex
 
+//go:embed all:dist
+var distFS embed.FS
+
 func main() {
 	port := "3000"
-	fmt.Printf("Server starting at http://%s:%s\n", getaddr(), port)
+	fmt.Printf("App running at http://%s:%s\n", getaddr(), port)
 
 	app := fiber.New(fiber.Config{
 		StreamRequestBody: true,
@@ -268,10 +274,6 @@ func main() {
 		}
 	}))
 
-	app.Get("/", func(c fiber.Ctx) error {
-		return c.SendFile("dist/index.html")
-	})
-
 	app.Post("/stream/:transferID", func(c fiber.Ctx) error {
 		transferid := c.Params("transferID")
 		transfersMu.Lock()
@@ -339,6 +341,16 @@ func main() {
 
 		return c.SendStream(reader)
 	})
+
+	serverRoot, err := fs.Sub(distFS, "dist")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	app.Use("/", static.New("", static.Config{
+		FS:         serverRoot,
+		IndexNames: []string{"index.html"},
+	}))
 
 	log.Fatal(app.Listen(":" + port))
 }
