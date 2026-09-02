@@ -28,7 +28,7 @@ export default function Device({device_type, device_name, handle_drop, target_de
                         <span className="text-[12.5px] opacity-80 font-medium">{device_ip}</span>
                     </div>
                     <div className="bg-transparent rounded-r-[10px] aspect-square p-5 w-21 shrink-0 flex items-center justify-center cursor-pointer transition-colors">
-                        <img className='w-full h-full ' src={`./src/assets/${device_type || "Unknown"}.svg`} />
+                        <img className='w-full h-full ' src={`/${device_type || "Unknown"}.svg`} />
                     </div>
 
                     

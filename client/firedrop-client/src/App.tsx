@@ -43,7 +43,7 @@ type Filereq = {
   senderName: string;
   status: string;
   preview?: string;
-  filetype?: string;
+  filetype: string;
   filesize?: number; 
 };
 
@@ -138,8 +138,8 @@ function App() {
               transferid: data.transfer_id || "", 
               senderName: data.senderName || "unknown", 
               filetype: data.filetype || "unknown", 
-              preview: data.preview || null, 
-              status: data.status || null, 
+              preview: data.preview || undefined, 
+              status: data.status || "waiting", 
               filesize: data.filesize || 0,
             }
           ]);
@@ -201,8 +201,7 @@ function App() {
       return;
     }
     const targetDevice = devices.find(d => d.id === targetDeviceID);
-    const transferId = crypto.randomUUID();
-
+    const transferId = generateUUID();
     const finalizeAndSend = (previewData: string | null) => {
       outgoingfilereqsRef.current.set(transferId, {
         targetdevice: targetDeviceID,
@@ -416,6 +415,17 @@ function App() {
     }
   };
 
+  function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
   return (
     <>
       <div className='min-w-screen min-h-screen bg-[#242424] flex justify-center'>
@@ -451,7 +461,7 @@ function App() {
                     }}
                     className="bg-[#4C4C4C] rounded-r-[10px] aspect-square border-l p-5 border-black w-21 shrink-0 flex items-center justify-center cursor-pointer hover:bg-[#434343] transition-colors"
                   >
-                    <img className='w-full h-full' src='./src/assets/settings.svg' alt="Settings" />
+                    <img className='w-full h-full' src='/settings.svg' alt="Settings" />
                   </div>
 
                 </div>
