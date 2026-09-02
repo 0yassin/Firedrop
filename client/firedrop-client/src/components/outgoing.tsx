@@ -21,15 +21,15 @@ export default function Outgoing({
         <div className="w-full h-full flex items-center flex-col text-white">
           
           <div className="w-full h-full flex flex-col px-4 py-3">
-            <span className="text-[20px] truncate">{filename}</span>
-            <div className="flex gap-2 text-[12.5px] opacity-80">
+            <span className="text-[20px] truncate font-semibold">{filename}</span>
+            <div className="flex gap-2 text-[12.5px] opacity-80 font-medium">
               <span className="capitalize">{status}</span>
               <span>•</span>
               <span>To: {target}</span>
             </div>
           </div>
 
-          <div className="w-full h-full flex items-center justify-center border-t border-black">
+          <div className="w-full h-full flex items-center justify-center border-t border-black font-medium">
             {status === 'uploading' ? (
               <div className="w-full p-2 text-center text-sm font-medium text-blue-400">
                 Uploading: {progress ?? 0}%

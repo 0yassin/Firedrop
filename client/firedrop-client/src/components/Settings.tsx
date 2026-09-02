@@ -17,11 +17,11 @@ export default function Settings({
 
   return (
     <section className="fixed inset-0 backdrop-blur-sm p-4 flex justify-center items-center bg-black/50 z-50">
-      <div className="flex flex-col w-full max-w-sm rounded-[10px] border border-black bg-[#4C4C4C] shadow-2xl overflow-hidden">
+      <div className="flex flex-col w-full max-w-sm rounded-[10px] border border-black bg-[#4C4C4C] shadow-2xl overflow-hidden transform transition-all animate-in zoom-in-95 duration-200">
         
         <div className="p-4 flex flex-col gap-3">
-          <span className="text-[20px] font-medium text-white">Settings</span>
-          <div className="flex flex-col gap-1.5">
+          <span className="text-[20px] font-semibold text-white">Settings</span>
+          <div className="flex flex-col gap-1.5 font-medium">
             <span className="text-sm text-white/80">Display name</span>
             <input
               value={newName}

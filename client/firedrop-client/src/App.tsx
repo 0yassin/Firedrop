@@ -5,6 +5,7 @@ import axios from 'axios';
 import Request from './components/request';
 import Outgoing from './components/outgoing';
 import Settings from './components/Settings';
+import { motion, AnimatePresence } from "motion/react";
 
 type Device = {
   id: string;
@@ -85,7 +86,6 @@ function App() {
   const [own_id, setownid] = useState<string | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [incomingfilereqs, setincomingfilereqs] = useState<Filereq[]>([]);
-  const api_url = `${import.meta.env.VITE_API_URL}`;
   const [progress, setProgress] = useState<Map<string, number>>(new Map());
   const outgoingfilereqsRef = useRef<Map<string, Outgoingfilereq>>(new Map());
   const [outgoingList, setOutgoingList] = useState<OutgoingItemUI[]>([]);
@@ -107,7 +107,7 @@ function App() {
     console.log("[OWNID] - ", own_id);
     console.log("[OUTGOINGFILEREQS] - ", outgoingfilereqsRef.current);
     console.log("[PROGRESS] - ", progress);
-    console.log(api_url);
+    console.log("[HOST] - ", window.location.host);
   }, [devices, devicename, devicetype, own_id, progress, logging]);
 
   useEffect(() => {
@@ -119,7 +119,8 @@ function App() {
     if (detectedType) params.append('type', detectedType);
 
     const queryString = params.toString();
-    const url = `ws://${api_url}/ws${queryString ? `?${queryString}` : ''}`;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${wsProtocol}//${window.location.host}/ws${queryString ? `?${queryString}` : ''}`;
 
     const socket = new WebSocket(url);
     socket.onmessage = (event) => {
@@ -271,8 +272,7 @@ function App() {
     );
 
     try {
-      const response = await axios.get(
-        `http://${api_url}/download/${transfertoaccept.transferid}`,
+      const response = await axios.get(`/download/${transfertoaccept.transferid}`,
         {
           responseType: 'blob',
           onDownloadProgress: (progressEvent) => {
@@ -348,7 +348,7 @@ function App() {
     );
 
     try {
-      await axios.post(`http://${api_url}/stream/${transferId}`, fileToUpload, {
+      await axios.post(`/stream/${transferId}`, fileToUpload, {
         headers: {
           "Content-Type": fileToUpload.type || "application/octet-stream",
         },
@@ -437,10 +437,10 @@ function App() {
                 <div className="w-full lg:min-w-64 rounded-[10px] border bg-[#006239] border-black transition-colors flex justify-between items-stretch min-h-17">
                   
                   <div className="flex flex-col justify-center px-4 py-4 text-white min-w-0 flex-1">
-                    <span className="text-[20px] truncate font-medium">
+                    <span className="text-[20px] truncate font-semibold">
                       {devicename || "My Device"} (You)
                     </span>
-                    <span className="text-[12.5px] opacity-80">
+                    <span className="text-[12.5px] opacity-80 font-medium">
                       {devicetype || "Unknown"}
                     </span>
                   </div>
@@ -456,49 +456,81 @@ function App() {
 
                 </div>
               </section>
-              {devices.map((device) => device.id !== own_id && (
-                <Device 
-                  key={device.id} 
-                  device_type={device.type} 
-                  handle_drop={handleDrop} 
-                  device_ip={device.ip} 
-                  target_device={device.id} 
-                  device_name={device.name} 
-                />
-              ))}
+              <AnimatePresence mode="popLayout">
+                {devices.map((device) => device.id !== own_id && (
+                  <motion.div
+                    key={device.id}
+                    initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+                    layout
+                  >
+                    <Device 
+                      key={device.id} 
+                      device_type={device.type} 
+                      handle_drop={handleDrop} 
+                      device_ip={device.ip} 
+                      target_device={device.id} 
+                      device_name={device.name} 
+                      />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           </div>
 
           <div className='w-full lg:w-auto'>
-            <h1 className='text-3xl mb-4 lg:min-w-64 font-semibold'>Requests</h1>
-            {incomingfilereqs.map((filereq: Filereq) => (
-              <Request 
-                key={filereq.transferid}
-                filename={filereq.filename}
-                sender={filereq.senderName}
-                filetype={filereq.filetype}
-                status={filereq.status}
-                progress={progress.get(filereq.transferid)}
-                accept={() => handleaccept(filereq)}
-                reject={() => handlereject(filereq)}
-                deletefunc={() => handledeleteReq(filereq.transferid)}
-              />
-            ))}
+            <h1 className='text-3xl mb-4 lg:min-w-64 font-semibold'>Requests</h1> 
+              <div className='flex-col gap-2 flex'>
+                <AnimatePresence mode="popLayout">
+                  {incomingfilereqs.map((filereq) => (
+                    <motion.div
+                      key={filereq.transferid}
+                      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+                      layout
+                    >
+                      <Request
+                        filename={filereq.filename}
+                        sender={filereq.senderName}
+                        filetype={filereq.filetype}
+                        status={filereq.status}
+                        progress={progress.get(filereq.transferid)}
+                        accept={() => handleaccept(filereq)}
+                        reject={() => handlereject(filereq)}
+                        deletefunc={() => handledeleteReq(filereq.transferid)}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
           </div>
 
           <div className='w-full lg:w-auto'>
-            <h1 className='text-3xl mb-4 lg:min-w-64 font-semibold'>Outgoing</h1>
-            {outgoingList.map((item) => (
-              <Outgoing 
-                key={item.transferId}
-                filename={item.filename}
-                target={item.targetDeviceName}
-                status={item.status}
-                progress={progress.get(item.transferId)}
-                cancel={() => handlecancel(item.transferId)}
-                deletefunc={() => handledeleteOutgoing(item.transferId)}
-              />
-            ))}
+            <h1 className='text-3xl mb-4 lg:min-w-64 font-semibold'>Outgoing</h1>           
+              <AnimatePresence mode="popLayout">
+                {outgoingList.map((item) => (
+                    <motion.div
+                      key={item.transferId}
+                      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+                      layout
+                    >
+                    <Outgoing 
+                      key={item.transferId}
+                      filename={item.filename}
+                      target={item.targetDeviceName}
+                      status={item.status}
+                      progress={progress.get(item.transferId)}
+                      cancel={() => handlecancel(item.transferId)}
+                      deletefunc={() => handledeleteOutgoing(item.transferId)}
+                    />
+                  </motion.div>
+                ))}
+            </AnimatePresence>
+
           </div>
 
         </div>
