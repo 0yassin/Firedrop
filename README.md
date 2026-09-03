@@ -3,8 +3,8 @@
 Firedrop is a file transfer application for devices connected to the same wifi network, the application allows you to and recieve files directly over the local network using your web browser, the executable only has to run on one device that acts as a server, the application can then be used by visiting a specific local address.
 
 ## Screenshots
-!(vertical screenshot)[https://raw.githubusercontent.com/0yassin/Firedrop/refs/heads/main/screenshots/vertical.png]
-!(horizontal screenshot)[https://raw.githubusercontent.com/0yassin/Firedrop/refs/heads/main/screenshots/horizontal.png]
+![vertical screenshot](https://raw.githubusercontent.com/0yassin/Firedrop/refs/heads/main/screenshots/vertical.png)
+![horizontal screenshot](https://raw.githubusercontent.com/0yassin/Firedrop/refs/heads/main/screenshots/horizontal.png)
 
 ## Technologies used
 - Frontend: TypeScript, React, Vite, Tailwind CSS (v4), Motion
