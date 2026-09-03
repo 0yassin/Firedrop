@@ -10,6 +10,7 @@ Firedrop is a file transfer application for devices connected to the same wifi n
 
 ## How to use
 Visit the releases page and download the binary suited for your operation system from the options, the program should display an address such as: "running on 192.168.xx.xx:3000", you can visit that address to use the app.
+
 *note: on linux, you will have to run the app inside a terminal instead of simply double clicking the executable: open your preferred terminal -> navigate to the directory where you downloaded the executable file -> run ./EXECUTABLE-NAME | example: ./Firedrop-linux-amd64*
 Alternatively, you can build the app yourself following the instructions below.
 
