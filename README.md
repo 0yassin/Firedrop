@@ -43,10 +43,10 @@ Before you try to compile and run the application yourself make sure your system
 # Common issues
 
 ### Other devices cannot open the web page
-The firewall on the host computer blocks incoming connections on port 3000.
+- The firewall on the host computer blocks incoming connections on port 3000.
 
 ### Devices on the network do not show in the Devices column
-The devices are likely connected to different networks or subnets, Make sure that all devices connect to the same Wi-Fi network.
+- The devices are likely connected to different networks or subnets, Make sure that all devices connect to the same Wi-Fi network.
 
 ### The application crashes during go build
-The dist folder is likely missing in the server directory, Run `npm run build` in the client directory before you run go build.
+- The dist folder is likely missing in the server directory, Run `npm run build` in the client directory before you run go build.
